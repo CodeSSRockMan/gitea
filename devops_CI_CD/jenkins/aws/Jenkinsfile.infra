@@ -7,11 +7,13 @@ pipeline {
   }
   
   environment {
-    TF_DIR = "devops_CI_CD/terraform/aws" 
+    TF_DIR = "devops_CI_CD/terraform/aws"
+    PLAN_OUT = "tfplan.out"
+    PLAN_SUMMARY = "tfplan-summary.txt"
   }
 
   options {
-    timestamps() // Agrega timestamps a los logs automáticamente
+    timestamps()
   }
 
   stages {
@@ -19,8 +21,10 @@ pipeline {
       steps {
         echo "[STEP] Starting environment preparation..."
         dir("${TF_DIR}") {
-          sh 'echo "[INFO] Current Terraform working directory: $(pwd)"'
-          sh 'terraform version'
+          sh '''
+            echo "[INFO] Current Terraform working directory: $(pwd)"
+            terraform version
+          '''
         }
       }
     }
@@ -36,7 +40,8 @@ pipeline {
               echo "[STEP] Exporting Terraform Cloud Token..."
               export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
 
-              echo "[STEP] Initializing Terraform backend and providers..."
+              echo "[STEP] Initializing Terraform backend (only for tfstate)..."
+              rm -rf .terraform
               terraform init -input=false
             '''
           }
@@ -44,36 +49,52 @@ pipeline {
       }
     }
 
-    stage('Terraform Validate') {
+    stage('Terraform Validate & Format') {
       steps {
         dir("${TF_DIR}") {
           sh '''
-            echo "[STEP] Validating Terraform code syntax..."
+            echo "[STEP] Formatting and validating Terraform code..."
+            terraform fmt -check
             terraform validate
           '''
         }
       }
     }
 
-    stage('Terraform Plan') {
+    stage('Terraform Plan (Local Execution)') {
       steps {
-        dir("${TF_DIR}") {
-          sh '''
-            echo "[STEP] Generating Terraform plan..."
-            terraform plan -input=false -out=tfplan.out
-          '''
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[STEP] Forcing local Terraform plan execution..."
+              export TF_CLI_ARGS_plan="-input=false -lock=false -no-color"
+              export TF_IN_AUTOMATION=true
+              export TF_CLOUD=false
+
+              terraform plan -out=${PLAN_OUT} | tee ${PLAN_SUMMARY}
+            '''
+          }
         }
       }
     }
 
-    stage('Terraform Apply') {
+    stage('Terraform Apply (Local Execution)') {
       steps {
         input message: "[APPROVAL] Confirm Apply: Do you want to deploy these changes to AWS?"
-        dir("${TF_DIR}") {
-          sh '''
-            echo "[STEP] Applying Terraform plan to AWS..."
-            terraform apply -input=false tfplan.out
-          '''
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[STEP] Forcing local Terraform apply execution..."
+              export TF_IN_AUTOMATION=true
+              export TF_CLOUD=false
+
+              terraform apply -input=false ${PLAN_OUT}
+            '''
+          }
         }
       }
     }
@@ -87,8 +108,9 @@ pipeline {
       echo "[FAILURE] Terraform process failed. Please review logs."
     }
     always {
-      sh 'echo "[INFO] Pipeline finished at: $(date)"'
-
+      sh '''
+        echo "[INFO] Pipeline finished at: $(date)"
+      '''
     }
   }
 }
