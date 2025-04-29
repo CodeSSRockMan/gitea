@@ -5,7 +5,7 @@ pipeline {
       defaultContainer 'terraform-aws'
     }
   }
-  
+
   environment {
     TF_DIR = "devops_CI_CD/terraform/aws"
     PLAN_OUT = "tfplan.out"
@@ -77,7 +77,6 @@ pipeline {
 
               terraform plan -out=tfplan.out | tee tfplan-summary.txt
             '''
-
           }
         }
       }
@@ -97,42 +96,43 @@ pipeline {
               export TF_CLOUD=false
               export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
 
-              terraform apply -auto-aprove -input=false tfplan.out
+              terraform apply -auto-approve -input=false tfplan.out
             '''
+          }
+        }
+      }
+    }
 
+    stage('Wait and Destroy Infrastructure') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
+          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[INFO] Waiting 60 seconds before destroying infrastructure..."
+              sleep 60
+
+              echo "[STEP] Destroying infrastructure..."
+              export TF_IN_AUTOMATION=true
+              export TF_CLOUD=false
+              export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
+
+              terraform destroy -auto-approve
+            '''
           }
         }
       }
     }
   }
-stage('Wait and Destroy Infrastructure') {
-  steps {
-    withCredentials([
-      [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
-      [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
-    ]) {
-      dir("${TF_DIR}") {
-        sh '''
-          echo "[INFO] Waiting 60 seconds before destroying infrastructure..."
-          sleep 60
 
-          echo "[STEP] Destroying infrastructure..."
-          export TF_IN_AUTOMATION=true
-          export TF_CLOUD=false
-          export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
-
-          terraform destroy -auto-approve
-        '''
-      }
-    }
-  }
-}
   post {
     success {
       echo "[SUCCESS] Terraform apply completed successfully. Infrastructure is deployed."
     }
     failure {
-      echo "[FAILURE] Terraform process failed. Please review logs."
+      echo "[FAILURE] Terraform process failed. See logs for details."
     }
     always {
       sh '''
