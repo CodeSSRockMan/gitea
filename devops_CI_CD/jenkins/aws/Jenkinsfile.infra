@@ -7,7 +7,7 @@ pipeline {
   }
   
   environment {
-    TF_DIR = "terraform/aws" // Cambia si tu estructura del repo es distinta
+    TF_DIR = "devops_CI_CD/terraform/aws" 
   }
 
   options {
