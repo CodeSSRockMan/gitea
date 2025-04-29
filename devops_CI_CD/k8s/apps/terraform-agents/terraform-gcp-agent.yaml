@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: terraform-gcp-agent
+  namespace: jenkins
+  labels:
+    jenkins/label: terraform-gcp
+spec:
+  containers:
+  - name: terraform-gcp
+    image: terraform-gcp-agent:latest
+    imagePullPolicy: Never
+    tty: true
