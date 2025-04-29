@@ -13,106 +13,103 @@ pipeline {
   }
 
   options {
-    timestamps()
-  }
+        timestamps()
+    }
 
-  stages {
-    stage('Prepare Environment') {
-      steps {
-        echo "[STEP] Starting environment preparation..."
-        dir("${TF_DIR}") {
-          sh '''
-            echo "[INFO] Current Terraform working directory: $(pwd)"
-            terraform version
-          '''
+    stages {
+
+        stage('Cleanup Before Checkout') {
+            steps {
+                deleteDir()
+            }
         }
-      }
-    }
 
-    stage('Terraform Init') {
-      steps {
-        withCredentials([
-          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
-          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
-        ]) {
-          dir("${TF_DIR}") {
-            sh '''
-              echo "[STEP] Exporting Terraform Cloud Token..."
-              export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
-
-              echo "[STEP] Initializing Terraform backend (only for tfstate)..."
-              rm -rf .terraform
-              terraform init -input=false
-            '''
-          }
+        stage('Checkout') {
+            steps {
+                echo "[INFO] Checking out repository..."
+                checkout scm
+            }
         }
-      }
-    }
 
-    stage('Terraform Validate & Format') {
-      steps {
-        dir("${TF_DIR}") {
-          sh '''
-            echo "[STEP] Formatting and validating Terraform code..."
-            terraform fmt -check
-            terraform validate
-          '''
+        stage('Terraform Init') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
+                    [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
+                ]) {
+                    dir("${TF_DIR}") {
+                        echo "[DEBUG] Initializing Terraform..."
+                        sh '''
+                          rm -rf .terraform
+                          terraform init -input=false
+                        '''
+                    }
+                }
+            }
         }
-      }
-    }
 
-    stage('Terraform Plan (Local Execution)') {
-      steps {
-        withCredentials([
-          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
-          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
-        ]) {
-          dir("${TF_DIR}") {
-            sh '''
-              echo "[STEP] Forcing local Terraform plan execution..."
-              export TF_CLI_ARGS_plan="-input=false -lock=false -no-color"
-              export TF_IN_AUTOMATION=true
-              export TF_CLOUD=false
-
-              terraform plan -out=${PLAN_OUT} | tee ${PLAN_SUMMARY}
-            '''
-          }
+        stage('Terraform Validate & Format') {
+            steps {
+                dir("${TF_DIR}") {
+                    echo "[DEBUG] Formatting and validating Terraform code..."
+                    sh 'terraform fmt -check'
+                    sh 'terraform validate'
+                }
+            }
         }
-      }
-    }
 
-    stage('Terraform Apply (Local Execution)') {
-      steps {
-        input message: "[APPROVAL] Confirm Apply: Do you want to deploy these changes to AWS?"
-        withCredentials([
-          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
-          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
-        ]) {
-          dir("${TF_DIR}") {
-            sh '''
-              echo "[STEP] Forcing local Terraform apply execution..."
-              export TF_IN_AUTOMATION=true
-              export TF_CLOUD=false
+        stage('Terraform Plan') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir("${TF_DIR}") {
+                        echo "[DEBUG] Forcing local terraform plan"
+                        sh '''
+                            export TF_CLI_ARGS_plan="-input=false -lock=false -no-color"
+                            export TF_IN_AUTOMATION=true
+                            export TF_CLOUD=false
 
-              terraform apply -input=false ${PLAN_OUT}
-            '''
-          }
+                            terraform plan -out=${PLAN_OUT} | tee ${PLAN_SUMMARY}
+                        '''
+                    }
+                }
+            }
         }
-      }
-    }
-  }
 
-  post {
-    success {
-      echo "[SUCCESS] Terraform apply completed successfully. Infrastructure is deployed."
+        stage('Terraform Apply') {
+            when {
+                expression {
+                    return currentBuild.currentResult == 'SUCCESS'
+                }
+            }
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir("${TF_DIR}") {
+                        echo "[INFO] Applying Terraform changes..."
+                        sh '''
+                            export TF_IN_AUTOMATION=true
+                            export TF_CLOUD=false
+                            terraform apply -auto-approve
+                        '''
+                    }
+                }
+            }
+        }
     }
-    failure {
-      echo "[FAILURE] Terraform process failed. Please review logs."
+
+    post {
+        success {
+            echo "[SUCCESS] Terraform plan pipeline completed successfully."
+        }
+        failure {
+            echo "[FAILURE] Terraform plan pipeline failed. See logs for details."
+        }
+        always {
+            echo "[FINAL] Pipeline finished with status: ${currentBuild.result}"
+            cleanWs()
+        }
     }
-    always {
-      sh '''
-        echo "[INFO] Pipeline finished at: $(date)"
-      '''
-    }
-  }
 }
