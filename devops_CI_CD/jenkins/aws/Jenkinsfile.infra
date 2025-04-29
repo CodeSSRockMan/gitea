@@ -84,7 +84,6 @@ pipeline {
 
     stage('Terraform Apply (Local Execution)') {
       steps {
-        input message: "[APPROVAL] Confirm Apply: Do you want to deploy these changes to AWS?"
         withCredentials([
           [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
           [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
