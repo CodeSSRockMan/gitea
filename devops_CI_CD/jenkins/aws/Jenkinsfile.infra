@@ -1,0 +1,93 @@
+pipeline {
+  agent {
+    kubernetes {
+      label 'terraform-aws'
+      defaultContainer 'terraform-aws'
+    }
+  }
+  
+  environment {
+    TF_DIR = "terraform/aws" // Cambia si tu estructura del repo es distinta
+  }
+
+  options {
+    timestamps() // Agrega timestamps a los logs automáticamente
+  }
+
+  stages {
+    stage('Prepare Environment') {
+      steps {
+        echo "[STEP] Starting environment preparation..."
+        dir("${TF_DIR}") {
+          sh 'echo "[INFO] Current Terraform working directory: $(pwd)"'
+          sh 'terraform version'
+        }
+      }
+    }
+
+    stage('Terraform Init') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
+          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[STEP] Exporting Terraform Cloud Token..."
+              export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
+
+              echo "[STEP] Initializing Terraform backend and providers..."
+              terraform init -input=false
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Terraform Validate') {
+      steps {
+        dir("${TF_DIR}") {
+          sh '''
+            echo "[STEP] Validating Terraform code syntax..."
+            terraform validate
+          '''
+        }
+      }
+    }
+
+    stage('Terraform Plan') {
+      steps {
+        dir("${TF_DIR}") {
+          sh '''
+            echo "[STEP] Generating Terraform plan..."
+            terraform plan -input=false -out=tfplan.out
+          '''
+        }
+      }
+    }
+
+    stage('Terraform Apply') {
+      steps {
+        input message: "[APPROVAL] Confirm Apply: Do you want to deploy these changes to AWS?"
+        dir("${TF_DIR}") {
+          sh '''
+            echo "[STEP] Applying Terraform plan to AWS..."
+            terraform apply -input=false tfplan.out
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "[SUCCESS] Terraform apply completed successfully. Infrastructure is deployed."
+    }
+    failure {
+      echo "[FAILURE] Terraform process failed. Please review logs."
+    }
+    always {
+      echo "[INFO] Pipeline finished at: $(date)"
+    }
+  }
+}
