@@ -1,0 +1,11 @@
+- name: Terminate slave agents
+  jenkins_agent:
+    state: absent
+    name: "slave-{{ item }}-{{ branch_name }}"
+  loop: "{{ agent_types }}"
+  ignore_errors: yes
+
+- name: Verify cleanup
+  wait_for:
+    timeout: 60
+    msg: "Waiting for agents to terminate"

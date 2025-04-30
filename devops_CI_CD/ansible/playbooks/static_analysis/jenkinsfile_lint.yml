@@ -1,0 +1,60 @@
+---
+- name: Run Jenkinsfile static analysis
+  hosts: localhost
+  vars_files:
+    - "/tmp/bootstrap_vars.yml"  # From Jenkins master
+    - "/workspace/gitea/devops_CI_CD/ansible/config/vars.yml"  # Project config
+
+  tasks:
+    # 1. Install prerequisites (Git + Jenkins linter CLI)
+    - name: Install Git
+      package:
+        name: git
+        state: present
+
+    - name: Install Jenkins linter
+      pip:
+        name: jenkins-job-builder
+        state: present
+
+    # 2. Clone repository
+    - name: Clone repository
+      git:
+        repo: "{{ repository.url }}"
+        dest: "/workspace/gitea"
+        version: "{{ repository.branch }}"
+        force: yes
+
+    # 3. Find Jenkinsfiles
+    - name: Find Jenkinsfiles
+      find:
+        paths: "/workspace/gitea"
+        patterns: "Jenkinsfile*"
+        recurse: yes
+      register: jenkins_files
+
+    # 4. Run linting in container (official Jenkins image)
+    - name: Lint Jenkinsfiles
+      docker_container:
+        name: "jenkins_lint_{{ item | basename }}"
+        image: "{{ jenkins.linter.container }}"
+        command: >
+          bash -c "java -jar /usr/share/jenkins/jenkins.war
+          -declarative-linter /code/{{ item | regex_replace('/workspace/gitea/', '') }}"
+        volumes:
+          - "/workspace/gitea:/code"
+        auto_remove: yes
+      loop: "{{ jenkins_files.files | map(attribute='path') | list }}"
+      register: lint_results
+      ignore_errors: yes  # Continue if one file fails
+
+    # 5. Save standardized logs
+    - name: Write lint results
+      copy:
+        content: "{{ lint_results.results | to_json }}"
+        dest: "/workspace/gitea/devops_CI_CD/logs/{{ ansible_date_time.date }}/jenkins-lint.json"
+
+    # 6. Explicit completion status
+    - name: Exit with status
+      command: exit 0
+      changed_when: false

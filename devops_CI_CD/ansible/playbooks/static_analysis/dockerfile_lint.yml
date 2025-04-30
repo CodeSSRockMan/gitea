@@ -1,0 +1,59 @@
+---
+- name: Run Dockerfile static analysis
+  hosts: localhost
+  vars_files:
+    - "/tmp/bootstrap_vars.yml"  # From Jenkins master
+
+  tasks:
+    # 1. Install prerequisites
+    - name: Install Git
+      package:
+        name: git
+        state: present
+
+    # 2. Clone repo
+    - name: Clone repository
+      git:
+        repo: "{{ repository.url }}"
+        dest: "/workspace/gitea"
+        version: "{{ repository.branch }}"
+        force: yes
+
+    # 3. Load project config
+    - name: Load project variables
+      include_vars:
+        file: "/workspace/gitea/devops_CI_CD/ansible/config/vars.yml"
+
+    # 4. Find Dockerfiles
+    - name: Get Dockerfiles
+      find:
+        paths: "/workspace/gitea/devops_CI_CD/docker"
+        patterns:
+          - "Dockerfile"
+          - "*.dockerfile"
+        recurse: yes
+      register: docker_files
+
+    # 5. Run hadolint
+    - name: Lint Dockerfiles
+      docker_container:
+        name: "hadolint_{{ item | basename }}"
+        image: "{{ docker.linter.container }}"
+        command: "{{ docker.linter.args }} /code/{{ item | regex_replace('/workspace/gitea/', '') }}"
+        volumes:
+          - "/workspace/gitea:/code"
+        auto_remove: yes
+      loop: "{{ docker_files.files | map(attribute='path') | list }}"
+      register: lint_results
+      ignore_errors: yes
+
+    # 6. Save logs
+    - name: Write logs
+      copy:
+        content: "{{ lint_results.results | to_json }}"
+        dest: "/workspace/gitea/devops_CI_CD/logs/{{ ansible_date_time.date }}/docker-lint.json"
+
+    # 7. Completion status
+    - name: Exit with status
+      command: exit 0
+      changed_when: false
