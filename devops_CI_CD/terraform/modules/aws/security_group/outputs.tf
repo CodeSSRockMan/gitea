@@ -1,3 +1,6 @@
+output "jenkins_sg" {
+  value = aws_security_group.jenkins_sg.id
+}
 output "bastion_sg" {
   value = aws_security_group.bastion_sg.id
 }
@@ -8,4 +11,8 @@ output "rds_sg" {
 
 output "ec2_sg" {
   value = aws_security_group.ec2_sg.id
+}
+
+output "jenkins_sg_id" {
+  value = aws_security_group.jenkins_sg.id
 }
