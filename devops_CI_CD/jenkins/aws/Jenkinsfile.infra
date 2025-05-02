@@ -1,0 +1,142 @@
+pipeline {
+  agent {
+    kubernetes {
+      label 'terraform-aws'
+      defaultContainer 'terraform-aws'
+    }
+  }
+
+  environment {
+    TF_DIR = "devops_CI_CD/terraform/aws"
+    PLAN_OUT = "tfplan.out"
+    PLAN_SUMMARY = "tfplan-summary.txt"
+  }
+
+  options {
+    timestamps()
+  }
+
+  stages {
+    stage('Prepare Environment') {
+      steps {
+        echo "[STEP] Starting environment preparation..."
+        dir("${TF_DIR}") {
+          sh '''
+            echo "[INFO] Current Terraform working directory: $(pwd)"
+            terraform version
+          '''
+        }
+      }
+    }
+
+    stage('Terraform Init') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
+          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[STEP] Exporting Terraform Cloud Token..."
+              export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
+
+              echo "[STEP] Initializing Terraform backend (only for tfstate)..."
+              rm -rf .terraform
+              terraform init -input=false
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Terraform Validate & Format') {
+      steps {
+        dir("${TF_DIR}") {
+          sh '''
+            echo "[STEP] Formatting and validating Terraform code..."
+            terraform fmt -check
+            terraform validate
+          '''
+        }
+      }
+    }
+
+    stage('Terraform Plan (Local Execution)') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
+          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[STEP] Forcing local Terraform plan execution..."
+              export TF_CLI_ARGS_plan="-input=false -lock=false -no-color"
+              export TF_IN_AUTOMATION=true
+              export TF_CLOUD=false
+              export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
+
+              terraform plan -out=tfplan.out | tee tfplan-summary.txt
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Terraform Apply (Local Execution)') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
+          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[STEP] Forcing local Terraform apply execution..."
+              export TF_IN_AUTOMATION=true
+              export TF_CLOUD=false
+              export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
+
+              terraform apply -auto-approve -input=false tfplan.out
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Wait and Destroy Infrastructure') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'],
+          [$class: 'StringBinding', credentialsId: 'terraform-cloud-token', variable: 'TERRAFORM_CLOUD_TOKEN']
+        ]) {
+          dir("${TF_DIR}") {
+            sh '''
+              echo "[INFO] Waiting 60 seconds before destroying infrastructure..."
+              sleep 60
+
+              echo "[STEP] Destroying infrastructure..."
+              export TF_IN_AUTOMATION=true
+              export TF_CLOUD=false
+              export TF_TOKEN_app_terraform_io=$TERRAFORM_CLOUD_TOKEN
+
+              terraform destroy -auto-approve
+            '''
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "[SUCCESS] Terraform apply completed successfully. Infrastructure is deployed."
+    }
+    failure {
+      echo "[FAILURE] Terraform process failed. See logs for details."
+    }
+    always {
+      sh '''
+        echo "[INFO] Pipeline finished at: $(date)"
+      '''
+    }
+  }
+}
