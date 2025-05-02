@@ -5,7 +5,7 @@ module "vpc" {
 }
 
 module "security_group" {
-  source = "../modules/aws/security_group"
+  source = "../modules/aws/security_group/gitea_groups"
   vpc_id = module.vpc.vpc_id
 }
 
@@ -23,6 +23,7 @@ module "ec2" {
   ami_id            = data.aws_ami.ubuntu.id
   subnet_id         = module.vpc.public_subnet_id
   security_group_id = module.security_group.ec2_sg
+  instance_name      = "gitea_web"
 }
 
 # module "bastion" {

@@ -4,7 +4,7 @@ module "vpc" {
 }
 
 module "security_group" {
-  source = "../modules/aws/security_group"
+  source = "../modules/aws/security_group/jenkins_master_groups"
   vpc_id = module.vpc.vpc_id
 }
 
@@ -22,6 +22,7 @@ module "jenkins_master" {
   instance_type        = var.instance_type
   subnet_id            = module.vpc.public_subnet_id
   security_group_id    = module.security_group.jenkins_sg
+  instance_name        = "jenkins-master"
   
 }
 

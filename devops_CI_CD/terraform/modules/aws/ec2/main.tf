@@ -7,6 +7,6 @@ resource "aws_instance" "ec2" {
 
 
   tags = {
-    Name = "gitea-web"
+    Name = var.instance_name
   }
 }
