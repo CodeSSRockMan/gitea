@@ -110,3 +110,4 @@ prime/
 
 # Manpage
 /man
+.terraform/
