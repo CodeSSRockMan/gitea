@@ -15,7 +15,7 @@ data "aws_iam_policy_document" "assume_role" {
 }
 
 
-resource "aws_iam_instance_profile" "profie" {
+resource "aws_iam_instance_profile" "profile" {
   name = "${var.role_name}-instance-profile"
   role = aws_iam_role.role.name
 }
