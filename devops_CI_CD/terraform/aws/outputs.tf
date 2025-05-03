@@ -22,3 +22,6 @@ output "gitea_instance_public_ip" {
   description = "Public IP of Gitea EC2 instance."
   value       = module.ec2.public_ip
 }
+output "rds_endpoint" {
+  value = module.rds.rds_endpoint
+}

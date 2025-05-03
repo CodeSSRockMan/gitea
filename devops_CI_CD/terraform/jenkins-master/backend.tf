@@ -3,7 +3,7 @@ terraform {
     organization = "SoftServe_Devops"
 
     workspaces {
-      name = "aws-infra"
+      name = "jenkins-master"
     }
   }
 }
