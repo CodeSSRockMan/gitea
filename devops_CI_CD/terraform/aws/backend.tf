@@ -3,11 +3,7 @@ terraform {
     organization = "SoftServe_Devops"
 
     workspaces {
-<<<<<<< HEAD
       name = "aws-infra"
-=======
-      name = "terraform-infra"
->>>>>>> origin/develop
     }
   }
 }
