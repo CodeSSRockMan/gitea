@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-master
+  labels:
+    app: jenkins
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      nodePort: {{ .Values.service.nodePort }}
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.agentPort }}
+      targetPort: {{ .Values.service.agentPort }}
+      protocol: TCP
+      name: agent
+  selector:
+    app: jenkins

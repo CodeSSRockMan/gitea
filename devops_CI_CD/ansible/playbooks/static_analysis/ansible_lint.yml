@@ -1,0 +1,64 @@
+---
+- name: Run Ansible static analysis
+  hosts: localhost
+  vars_files:
+    - "/tmp/bootstrap_vars.yml"  # From Jenkins master
+
+  tasks:
+    # 1. Install prerequisites (Git, Python)
+    - name: Install Git
+      package:
+        name: git
+        state: present
+
+    - name: Install Python
+      package:
+        name: python3
+        state: present
+
+    # 2. Clone repo (branch from bootstrap vars)
+    - name: Clone repository
+      git:
+        repo: "{{ repository.url }}"
+        dest: "/workspace/gitea"
+        version: "{{ repository.branch }}"
+        force: yes
+
+    # 3. Load project-specific vars.yml
+    - name: Load project variables
+      include_vars:
+        file: "/workspace/gitea/devops_CI_CD/ansible/config/vars.yml"
+
+    # 4. Find Ansible playbooks/roles
+    - name: Get Ansible files
+      find:
+        paths: "/workspace/gitea/devops_CI_CD/ansible"
+        patterns: 
+          - "*.yml"
+          - "*.yaml"
+        recurse: yes
+      register: ansible_files
+
+    # 5. Run ansible-lint in container
+    - name: Lint Ansible files
+      docker_container:
+        name: "ansible_lint_{{ item | basename }}"
+        image: "{{ ansible.linter.container }}"
+        command: "{{ ansible.linter.args }} /code/{{ item | regex_replace('/workspace/gitea/', '') }}"
+        volumes:
+          - "/workspace/gitea:/code"
+        auto_remove: yes
+      loop: "{{ ansible_files.files | map(attribute='path') | list }}"
+      register: lint_results
+      ignore_errors: yes  # Continue if one file fails
+
+    # 6. Save logs
+    - name: Write logs
+      copy:
+        content: "{{ lint_results.results | to_json }}"
+        dest: "/workspace/gitea/devops_CI_CD/logs/{{ ansible_date_time.date }}/ansible-lint.json"
+
+    # 7. Explicit completion status
+    - name: Exit with status
+      command: exit 0
+      changed_when: false

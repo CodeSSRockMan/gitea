@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: terraform-aws-agent
+  namespace: jenkins
+  labels:
+    jenkins/label: terraform-aws
+spec:
+  containers:
+  - name: terraform-aws
+    image: terraform-aws-agent:latest
+    imagePullPolicy: Never
+    command:
+    - cat
+    tty: true

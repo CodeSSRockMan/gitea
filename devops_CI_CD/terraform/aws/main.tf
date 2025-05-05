@@ -4,6 +4,7 @@ module "vpc" {
   cidr_block = var.vpc_cidr
 }
 
+<<<<<<< HEAD
 module "security_group" {
   source = "../modules/aws/security_group/gitea_groups"
   vpc_id = module.vpc.vpc_id
@@ -17,11 +18,14 @@ module "route_tables" {
 }
 
 
+=======
+>>>>>>> origin/develop
 module "ec2" {
   source            = "../modules/aws/ec2"
   instance_type     = var.instance_type
   ami_id            = data.aws_ami.ubuntu.id
   subnet_id         = module.vpc.public_subnet_id
+<<<<<<< HEAD
   security_group_id = module.security_group.ec2_sg
   instance_name      = "gitea_web"
 }
@@ -32,6 +36,12 @@ module "ec2" {
 #   ami_id            = data.aws_ami.ubuntu.id
 #   security_group_id = module.security_group.bastion_sg
 # }
+=======
+  security_group_id = module.security_group.id
+}
+
+
+>>>>>>> origin/develop
 
 module "s3_bucket" {
   source      = "../modules/aws/s3"
@@ -39,6 +49,7 @@ module "s3_bucket" {
   #env         = var.env
 }
 
+<<<<<<< HEAD
 data "aws_ssm_parameter" "db_user" {
   name            = "/rds/mysql/username"
   with_decryption = true
@@ -58,3 +69,9 @@ module "rds" {
   rds_sg_id   = module.security_group.rds_sg
 }
 
+=======
+module "security_group" {
+  source = "../modules/aws/security_group"
+  vpc_id = module.vpc.vpc_id
+}
+>>>>>>> origin/develop

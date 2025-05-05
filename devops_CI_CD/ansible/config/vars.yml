@@ -1,0 +1,47 @@
+# /workspace/gitea/devops_CI_CD/ansible/config/vars.yml
+repository:
+  url: "https://github.com/CodeSSRockMan/gitea.git"  # Overridden by bootstrap
+  branch: "main"  # Default, overridden by bootstrap
+
+terraform:
+  linter:
+    container: "ghcr.io/terraform-linters/tflint:latest"
+    args: "--config /code/.tflint.hcl --no-color"
+    config:  # Example additional rules
+      enabled_rules:
+        - "aws_resource_missing_tags"
+        - "terraform_unused_declarations"
+
+ansible:
+  linter:
+    container: "ansible/ansible-lint:latest"
+    args: "--parseable-severity -x role-name"
+    skip_list:  # Example exclusions
+      - "204"  # Lines should be no longer than 120 chars
+      - "305"  # Use shell only when shell functionality is required
+
+docker:
+  linter:
+    container: "hadolint/hadolint:latest"
+    args: "--format json"
+    rules:  # Example rule overrides
+      disable:
+        - "DL3008"  # Pin versions in apt-get install
+        - "DL3015"  # Avoid additional packages
+
+jenkins:
+  linter:
+    container: "jenkins/jenkins:lts-jdk11"
+    rules:
+      strict_mode: true
+      ignored_warnings:
+        - "missing_agent_declaration"
+        - "deprecated_step"
+
+logging:
+  dir: "/workspace/gitea/devops_CI_CD/logs"
+  retention_days: 7
+
+paths:
+  terraform: "/terraform"
+  ansible: "/ansible"

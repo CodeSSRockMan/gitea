@@ -1,0 +1,10 @@
+repository:
+  url: {{ repository_url | default('https://github.com/CodeSSRockMan/gitea.git') }}
+  branch: {{ branch_name }}
+
+execution:
+  mode: {{ execution_mode }}
+  target: {{ analysis_target }}
+
+logging:
+  dir: {{ workspace_root }}/logs

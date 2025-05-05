@@ -1,0 +1,47 @@
+---
+# playbooks/master_orchestrator.yml
+- name: Multimode Static Analysis Orchestrator
+  hosts: localhost
+  vars:
+    execution_mode: "sequential"  # Overridden by Jenkins: sequential|parallel|single
+    analysis_target: "all"       # Overridden by Jenkins: all|terraform|ansible|docker|jenkinsfile
+    branch_name: "{{ lookup('env', 'BRANCH_NAME') }}"
+    workspace_root: "/workspace/{{ branch_name }}"
+
+  tasks:
+    # 1. Prepare branch workspace
+    - name: Create workspace directory
+      file:
+        path: "{{ workspace_root }}"
+        state: directory
+
+    # 2. Generate bootstrap config
+    - name: Create branch-specific vars
+      template:
+        src: "templates/bootstrap_vars.j2"
+        dest: "{{ workspace_root }}/bootstrap_vars.yml"
+
+    # 3. Dynamic execution mode selection
+    - name: Execute analysis pipeline
+      block:
+        - name: Run sequential analysis
+          include_tasks: "sequential_analysis.yml"
+          when: execution_mode == "sequential"
+
+        - name: Run parallel analysis
+          include_tasks: "parallel_analysis.yml"
+          when: execution_mode == "parallel"
+
+        - name: Run single analysis
+          include_tasks: "single_analysis.yml"
+          when: execution_mode == "single"
+      always:
+        - name: Archive logs
+          archive:
+            path: "{{ workspace_root }}/logs/*"
+            dest: "{{ workspace_root }}/analysis_logs.zip"
+
+        - name: Cleanup slave agents
+          include_tasks: "slave_cleanup.yml"
+          vars:
+            agent_types: "{{ (execution_mode == 'single') | ternary([analysis_target], ['terraform','ansible','docker','jenkinsfile']) }}"

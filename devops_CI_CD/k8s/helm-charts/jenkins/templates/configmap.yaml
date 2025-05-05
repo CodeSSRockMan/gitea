@@ -1,0 +1,9 @@
+# k8s/helm-charts/jenkins/templates/jenkins-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-config
+  labels:
+    app: jenkins
+data:
+  JENKINS_OPTS: "--argumentsRealm.passwd.{{ .Values.adminCredentials.user }}={{ .Values.adminCredentials.password }} --argumentsRealm.roles.admin=admin"
