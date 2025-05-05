@@ -1,4 +1,4 @@
-*.sh
+
 *.lock.hcl
 *.tfstate
 *.tfstate.backup
