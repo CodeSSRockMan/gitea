@@ -3,7 +3,7 @@ terraform {
     organization = "SoftServe_Devops"
 
     workspaces {
-      name = "terraform-infra"
+      name = "gcp-infra"
     }
   }
 }

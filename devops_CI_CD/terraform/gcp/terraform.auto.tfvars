@@ -6,7 +6,7 @@ gitea_secret_user     = "gitea-user"
 gitea_secret_password = "gitea-password"
 
 gitea_vm_name               = "gitea-vm"
-machine_type                = "e2-medium"
+machine_type                = "e2-micro"
 zone                        = "us-central1-a"
 image                       = "ubuntu-os-cloud/ubuntu-2204-lts"
 instance_tags               = ["gitea", "web"]
