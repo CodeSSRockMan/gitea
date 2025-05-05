@@ -24,7 +24,7 @@ module "jenkins_master" {
   security_group_id    = module.security_group.jenkins_sg
   instance_name        = "jenkins-master"
   iam_instance_profile = module.iam.instance_profile_name
-
+  
 
 }
 

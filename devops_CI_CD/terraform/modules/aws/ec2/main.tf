@@ -9,4 +9,8 @@ resource "aws_instance" "ec2" {
   tags = {
     Name = var.instance_name
   }
+
+  lifecycle {
+    ignore_changes = [associate_public_ip_address] #
+  }
 }
