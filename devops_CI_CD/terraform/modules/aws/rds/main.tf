@@ -9,6 +9,7 @@ resource "aws_db_subnet_group" "db_subnet_group" {
 
 resource "aws_db_instance" "gitea_rds" {
   identifier              = "gitea-db-instance"
+  db_name                 = var.db_name
   allocated_storage       = 20
   engine                  = "mysql"
   engine_version          = "8.0"

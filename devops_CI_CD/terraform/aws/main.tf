@@ -58,6 +58,7 @@ module "rds" {
   subnet_ids  = module.vpc.private_subnet_ids
   vpc_id      = module.vpc.vpc_id
   rds_sg_id   = module.security_group.rds_sg
+  db_name     = var.db_name
 }
 
 module "iam" {

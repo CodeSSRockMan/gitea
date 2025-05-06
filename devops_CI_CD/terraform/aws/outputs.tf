@@ -25,3 +25,7 @@ output "gitea_instance_public_ip" {
 output "rds_endpoint" {
   value = module.rds.rds_endpoint
 }
+
+output "rds_db_name" {
+  value = module.rds.rds_name
+}

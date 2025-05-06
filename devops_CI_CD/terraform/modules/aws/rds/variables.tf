@@ -26,3 +26,7 @@ variable "db_password" {
   description = "RDS master password"
 }
 
+variable "db_name" {
+  type        = string
+  description = "RDS database name"
+}

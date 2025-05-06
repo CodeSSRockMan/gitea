@@ -10,3 +10,7 @@ output "rds_identifier" {
 output "rds_id" {
   value       = aws_db_instance.gitea_rds.id
 }
+
+output "rds_name" {
+  value       = aws_db_instance.gitea_rds.db_name
+}
