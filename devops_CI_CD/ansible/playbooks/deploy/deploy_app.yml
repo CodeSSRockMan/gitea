@@ -1,0 +1,82 @@
+---
+- name: Deploy and Run Forked Gitea App
+  hosts: localhost
+  vars_files:
+    - "/tmp/bootstrap_vars.yml"  # This file is sent by Jenkins with the variables
+    - "/workspace/gitea/devops_CI_CD/ansible/config/vars.yml"  # Project configuration
+
+  tasks:
+    # 1. Ensure Git is installed
+    - name: Ensure Git is installed
+      package:
+        name: git
+        state: present
+      become: yes
+
+    # 2. Ensure Go is installed
+    - name: Ensure Go is installed
+      package:
+        name: golang-go
+        state: present
+      become: yes
+
+    # 3. Clone the Gitea fork repository
+    - name: Clone the Gitea fork repository
+      git:
+        repo: "{{ repository.url }}"
+        dest: "/opt/gitea"  # Using a different path than workspace
+        version: "{{ repository.branch }}"
+        force: yes
+      become: yes
+
+    # 4. Write database configuration into the Go file
+    - name: Write database configuration into the Go file
+      lineinfile:
+        path: "/opt/gitea/config/database_config.go"
+        line: |
+          package config
+          import (
+              "fmt"
+              "log"
+              "os"
+          )
+          var (
+              DBHost     = "{{ rds_db_host }}"
+              DBPort     = "{{ rds_db_port }}"
+              DBUser     = "{{ rds_db_user }}"
+              DBPassword = "{{ rds_db_password }}"
+              DBName     = "{{ rds_db_name }}"
+          )
+          func GetDBConnectionString() string {
+              return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DBHost, DBPort, DBUser, DBPassword, DBName)
+          }
+          func InitDB() {
+              // Connection logic here using GetDBConnectionString()
+          }
+      become: yes
+      create: yes
+      mode: '0644'
+
+    # 5. Build the Go application
+    - name: Build Go application
+      shell: |
+        cd /opt/gitea
+        go mod tidy
+        go build -o gitea-app
+      become: yes
+
+    # 6. Start the Go application
+    - name: Start Gitea application
+      command: "/opt/gitea/gitea-app &"
+      become: yes
+
+    # 7. Check if the application is running
+    - name: Check if Gitea app is running
+      command: "ps aux | grep gitea-app"
+      register: app_status
+      changed_when: false
+      become: yes
+
+    - name: Show Gitea app status
+      debug:
+        var: app_status.stdout
