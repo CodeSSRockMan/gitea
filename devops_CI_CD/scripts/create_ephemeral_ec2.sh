@@ -138,3 +138,16 @@ done
 FINAL_STATE=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$INSTANCE_ID" \
   --query "Reservations[0].Instances[0].State.Name" --output text)
 [[ "$FINAL_STATE" == "running" ]] || { echo "[ERROR] Instance failed to start."; exit 1; }
+
+# ---------- Export instance data for next pipeline stage ----------
+echo "[INFO] Exporting environment variables for next stage..."
+
+cat <<EOF > ephemeral_instance_env.txt
+INSTANCE_ID=${INSTANCE_ID}
+SUBNET_ID=${SUBNET_ID}
+VPC_ID=${VPC_ID}
+SG_ID=${AGENT_SG_ID}
+EOF
+
+echo "[INFO] Exported values:"
+cat ephemeral_instance_env.txt
