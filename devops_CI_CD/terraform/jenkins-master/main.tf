@@ -44,6 +44,7 @@ module "iam" {
   policy_arns = [
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
     "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+    "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
     aws_iam_policy.jenkins_ssm_exec.arn
   ]
 }
