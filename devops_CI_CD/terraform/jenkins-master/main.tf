@@ -28,11 +28,22 @@ module "jenkins_master" {
 
 }
 
+
+resource "aws_iam_policy" "jenkins_ssm_exec" {
+  name        = "jenkins-ssm-execution-policy"
+  path        = "/"
+  description = "Permite que Jenkins Master ejecute y recupere comandos vía SSM"
+  policy      = file("${path.module}/jenkins-ssm-execution-policy.json")
+}
+
+
+
 module "iam" {
   source    = "../modules/aws/iam"
   role_name = "jenkins-master-role"
   policy_arns = [
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
-    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+    aws_iam_policy.jenkins_ssm_exec.arn
   ]
 }
