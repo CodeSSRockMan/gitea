@@ -1,0 +1,10 @@
+pipeline {
+  agent any
+  stages {
+    stage('Check Jenkins Master') {
+      steps {
+        sh 'bash devops_CI_CD/scripts/check_status_master.sh'
+      }
+    }
+  }
+}
