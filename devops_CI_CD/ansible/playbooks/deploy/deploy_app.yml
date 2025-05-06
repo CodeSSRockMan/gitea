@@ -1,82 +1,65 @@
+# /workspace/gitea/devops_CI_CD/ansible/playbooks/deploy/deploy_app.yml
 ---
-- name: Deploy and Run Forked Gitea App
-  hosts: localhost
+- name: Deploy Gitea (Minimal)
+  hosts: all
+  become: true
   vars_files:
-    - "/tmp/bootstrap_vars.yml"  # This file is sent by Jenkins with the variables
-    - "/workspace/gitea/devops_CI_CD/ansible/config/vars.yml"  # Project configuration
+    - "/tmp/bootstrap_vars.yml"  # Jenkins variables
+    - "{{ playbook_dir }}/../../config/vars.yml"  # Relative path to repo variables
 
   tasks:
-    # 1. Ensure Git is installed
-    - name: Ensure Git is installed
-      package:
-        name: git
-        state: present
-      become: yes
+    # 1. Install only git, make, golang, npm
+    - name: Install core tools
+      apt:
+        name:
+          - git
+          - make
+          - golang
+          - npm
+        update_cache: yes
 
-    # 2. Ensure Go is installed
-    - name: Ensure Go is installed
-      package:
-        name: golang-go
-        state: present
-      become: yes
-
-    # 3. Clone the Gitea fork repository
-    - name: Clone the Gitea fork repository
-      git:
-        repo: "{{ repository.url }}"
-        dest: "/opt/gitea"  # Using a different path than workspace
-        version: "{{ repository.branch }}"
-        force: yes
-      become: yes
-
-    # 4. Write database configuration into the Go file
-    - name: Write database configuration into the Go file
-      lineinfile:
-        path: "/opt/gitea/config/database_config.go"
-        line: |
-          package config
-          import (
-              "fmt"
-              "log"
-              "os"
-          )
-          var (
-              DBHost     = "{{ rds_db_host }}"
-              DBPort     = "{{ rds_db_port }}"
-              DBUser     = "{{ rds_db_user }}"
-              DBPassword = "{{ rds_db_password }}"
-              DBName     = "{{ rds_db_name }}"
-          )
-          func GetDBConnectionString() string {
-              return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DBHost, DBPort, DBUser, DBPassword, DBName)
-          }
-          func InitDB() {
-              // Connection logic here using GetDBConnectionString()
-          }
-      become: yes
-      create: yes
-      mode: '0644'
-
-    # 5. Build the Go application
-    - name: Build Go application
+    # 2. Install Node.js 18.x (Gitea requirement)
+    - name: Setup NodeSource 18.x
       shell: |
-        cd /opt/gitea
-        go mod tidy
-        go build -o gitea-app
-      become: yes
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+        apt-get install -y nodejs
+      args:
+        executable: /bin/bash
 
-    # 6. Start the Go application
-    - name: Start Gitea application
-      command: "/opt/gitea/gitea-app &"
-      become: yes
+    # 3. Fix node/nodejs conflict
+    - name: Create node symlink
+      file:
+        src: "/usr/bin/nodejs"
+        dest: "/usr/bin/node"
+        state: link
+        force: yes
 
-    # 7. Check if the application is running
-    - name: Check if Gitea app is running
-      command: "ps aux | grep gitea-app"
-      register: app_status
-      changed_when: false
-      become: yes
+    # 4. Clone repo (variables from config/vars.yml)
+    - name: Clone Gitea
+      git:
+        repo: "{{ gitea_repo }}"
+        dest: "{{ gitea_install_dir }}"
+        version: "{{ gitea_branch }}"
+        depth: 1
 
-    - name: Show Gitea app status
-      debug:
-        var: app_status.stdout
+    # 5. Build with bindata (official Gitea method)
+    - name: Compile Gitea
+      shell: "cd {{ gitea_install_dir }} && TAGS='bindata' make build"
+      args:
+        executable: /bin/bash
+        creates: "{{ gitea_install_dir }}/gitea"  # Skip if exists
+
+    # 6. Deploy systemd service from J2 template
+    - name: Configure service
+      template:
+        src: "{{ playbook_dir }}/../../templates/gitea.service.j2"
+        dest: "/etc/systemd/system/gitea.service"
+        mode: 0644
+      notify: Restart Gitea
+
+  handlers:
+    - name: Restart Gitea
+      systemd:
+        name: gitea
+        state: restarted
+        enabled: yes

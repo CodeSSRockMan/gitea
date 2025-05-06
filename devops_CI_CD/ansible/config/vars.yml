@@ -10,6 +10,12 @@ rds_db_user: "your-db-user"
 rds_db_password: "your-db-password"
 rds_db_name: "your-db-name"
 
+gitea_repo: "https://github.com/CodeSSRockMan/gitea.git"
+gitea_branch: "develop"
+gitea_install_dir: "/opt/gitea"
+gitea_user: "git"
+gitea_port: 3000
+
 terraform:
   linter:
     container: "ghcr.io/terraform-linters/tflint:latest"
