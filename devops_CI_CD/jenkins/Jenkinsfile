@@ -3,7 +3,7 @@ pipeline {
   stages {
     stage('Check Jenkins Master') {
       steps {
-        sh 'bash devops_CI_CD/scripts/create_ephemeral_ec2.sh'
+        sh 'bash devops_CI_CD/scripts/init_docker_agent.sh'
       }
     }
   }
