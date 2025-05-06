@@ -3,6 +3,13 @@ repository:
   url: "https://github.com/CodeSSRockMan/gitea.git"  # Overridden by bootstrap
   branch: "main"  # Default, overridden by bootstrap
 
+#ENDPOINTS NEED TO BE UPDATED
+rds_db_host: "your-rds-instance-endpoint"
+rds_db_port: "5432"
+rds_db_user: "your-db-user"
+rds_db_password: "your-db-password"
+rds_db_name: "your-db-name"
+
 terraform:
   linter:
     container: "ghcr.io/terraform-linters/tflint:latest"
