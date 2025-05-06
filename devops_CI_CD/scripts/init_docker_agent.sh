@@ -6,7 +6,7 @@ REGION="us-east-1"
 DOCKER_HUB_USER="hescobarsanchez"       # <-- your Docker Hub user
 IMAGE_NAME="jenkins-agent"              # <-- your image name
 IMAGE_TAG="latest"                      # <-- your image tag
-AGENT_INFO_SCRIPT="./check_status_agent.sh"
+AGENT_INFO_SCRIPT="bash devops_CI_CD/scripts/check_status_agent.sh" # <--  path to the script that retrieves EC2 metadata
 
 # ---------- Fetch EC2 metadata ----------
 echo "[INFO] Executing ${AGENT_INFO_SCRIPT} to retrieve EC2 metadata..."
