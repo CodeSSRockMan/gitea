@@ -14,6 +14,11 @@ resource "aws_security_group" "bastion_sg" {
     Name = "bastion-sg"
   }
 }
+resource "aws_security_group" "ec2_sg" {
+  name        = "ec2-sg"
+  description = "Security group for public Gitea EC2"
+  vpc_id      = var.vpc_id
+}
 
 resource "aws_security_group" "rds_sg" {
   name        = "gitea-rds-sg"
@@ -24,7 +29,7 @@ resource "aws_security_group" "rds_sg" {
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.bastion_sg.id]
+    security_groups = [aws_security_group.ec2_sg.id]
   }
 
   egress {
@@ -39,11 +44,6 @@ resource "aws_security_group" "rds_sg" {
   }
 }
 
-resource "aws_security_group" "ec2_sg" {
-  name        = "ec2-sg"
-  description = "Security group for public Gitea EC2"
-  vpc_id      = var.vpc_id
-}
 
 resource "aws_security_group_rule" "http_ingress" {
   type              = "ingress"
@@ -54,6 +54,19 @@ resource "aws_security_group_rule" "http_ingress" {
   security_group_id = aws_security_group.ec2_sg.id
   description       = "Allow HTTP"
 }
+
+resource "aws_security_group_rule" "ssh_ingress" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       =  ["0.0.0.0/0"]
+  security_group_id = aws_security_group.ec2_sg.id
+  description       = "Allow SSH"
+}
+
+
+
 
 resource "aws_security_group_rule" "egress_all" {
   type              = "egress"
