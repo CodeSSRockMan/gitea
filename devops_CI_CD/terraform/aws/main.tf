@@ -17,13 +17,15 @@ module "route_tables" {
 }
 
 
+
 module "ec2" {
   source            = "../modules/aws/ec2"
   instance_type     = var.instance_type
   ami_id            = data.aws_ami.ubuntu.id
   subnet_id         = module.vpc.public_subnet_id
   security_group_id = module.security_group.ec2_sg
-  instance_name      = "gitea_web"
+  instance_name     = "gitea_web"
+  iam_instance_profile = module.iam.instance_profile_name
 }
 
 # module "bastion" {
@@ -58,3 +60,11 @@ module "rds" {
   rds_sg_id   = module.security_group.rds_sg
 }
 
+module "iam" {
+  source    = "../modules/aws/iam"
+  role_name = "gitea-web-role"
+  policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  ]
+}
