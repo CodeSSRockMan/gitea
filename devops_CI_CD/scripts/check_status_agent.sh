@@ -4,20 +4,35 @@ set -e
 REGION="us-east-1"
 AGENT_TAG="jenkins-agent-ephemeral"
 
-echo "[INFO] Obteniendo datos del Jenkins Agent ($AGENT_TAG)..."
+echo "[INFO] Looking for EC2 instances with tag Name=$AGENT_TAG in region $REGION..."
 
-# Obtener Instance ID del agente
-INSTANCE_ID=$(aws ec2 describe-instances \
+# List all instances with the given tag, regardless of state
+ALL_INSTANCES=$(aws ec2 describe-instances \
   --region "$REGION" \
-  --filters "Name=tag:Name,Values=$AGENT_TAG" "Name=instance-state-name,Values=running" \
-  --query "Reservations[0].Instances[0].InstanceId" --output text)
+  --filters "Name=tag:Name,Values=$AGENT_TAG" \
+  --query "Reservations[].Instances[].[InstanceId,State.Name]" \
+  --output text)
 
-if [[ "$INSTANCE_ID" == "None" || -z "$INSTANCE_ID" ]]; then
-  echo "[ERROR] No se encontró ninguna instancia activa con tag Name=$AGENT_TAG"
-  exit 1
+if [[ -z "$ALL_INSTANCES" ]]; then
+  echo "[INFO] No EC2 instances found with tag Name=$AGENT_TAG."
+  exit 0
 fi
 
-# Obtener información clave de la instancia
+echo "[INFO] Instances with tag Name=$AGENT_TAG:"
+echo "$ALL_INSTANCES"
+echo ""
+
+# Try to find one that's running
+INSTANCE_ID=$(echo "$ALL_INSTANCES" | awk '$2 == "running" {print $1; exit}')
+
+if [[ -z "$INSTANCE_ID" ]]; then
+  echo "[WARN] No running instance found. Here is the status of other instances:"
+  echo "$ALL_INSTANCES"
+  exit 0
+fi
+
+# Proceed with normal inspection if a running instance was found
+echo "[INFO] Found running instance: $INSTANCE_ID"
 PUBLIC_IP=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
 PRIVATE_IP=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].PrivateIpAddress" --output text)
 AMI_ID=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].ImageId" --output text)
@@ -27,9 +42,8 @@ SG_IDS=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$INSTANCE
 IAM_ROLE=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$INSTANCE_ID" \
   --query "Reservations[0].Instances[0].IamInstanceProfile.Arn" --output text | awk -F'/' '{print $NF}')
 
-# Mostrar resumen
 echo ""
-echo "[INFO] Jenkins Agent encontrado:"
+echo "[INFO] Jenkins Agent details:"
 echo "Instance ID     : $INSTANCE_ID"
 echo "Public IP       : $PUBLIC_IP"
 echo "Private IP      : $PRIVATE_IP"
@@ -40,9 +54,8 @@ echo "Security Groups : $SG_IDS"
 echo "IAM Role        : $IAM_ROLE"
 echo ""
 
-# Mostrar reglas de cada SG
 for SG_ID in $SG_IDS; do
-  echo "[INFO] Reglas del Security Group $SG_ID:"
+  echo "[INFO] Rules for Security Group $SG_ID:"
   aws ec2 describe-security-groups --region "$REGION" --group-ids "$SG_ID" \
     --query "SecurityGroups[0].IpPermissions" --output table
 done

@@ -7,22 +7,37 @@ AGENT_SG_NAME="jenkins-agent-sg"
 AGENT_ROLE_NAME="jenkins-agent-role"
 AGENT_PROFILE_NAME="jenkins-agent-profile"
 
-echo "[INFO $(date +%T)] Looking for EC2 instance tagged '$AGENT_TAG'..."
+echo "[INFO ] Looking for EC2 instance tagged '$AGENT_TAG'..."
 INSTANCE_ID=$(aws ec2 describe-instances --region "$REGION" \
   --filters "Name=tag:Name,Values=$AGENT_TAG" "Name=instance-state-name,Values=running" \
   --query "Reservations[0].Instances[0].InstanceId" --output text 2>/dev/null)
 
 if [[ "$INSTANCE_ID" != "None" && -n "$INSTANCE_ID" ]]; then
-  echo "[INFO] Terminating EC2 instance: $INSTANCE_ID"
-  aws ec2 terminate-instances --instance-ids "$INSTANCE_ID" --region "$REGION" > /dev/null
-  echo "[INFO] Waiting for EC2 instance to terminate..."
-  aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID" --region "$REGION"
-  echo "[INFO] Instance terminated."
+  echo "[INFO ] Instance found: $INSTANCE_ID. Checking status checks..."
+
+  SYSTEM_STATUS=$(aws ec2 describe-instance-status \
+    --instance-ids "$INSTANCE_ID" --region "$REGION" \
+    --query "InstanceStatuses[0].SystemStatus.Status" --output text)
+
+  INSTANCE_STATUS=$(aws ec2 describe-instance-status \
+    --instance-ids "$INSTANCE_ID" --region "$REGION" \
+    --query "InstanceStatuses[0].InstanceStatus.Status" --output text)
+
+  if [[ "$SYSTEM_STATUS" == "ok" && "$INSTANCE_STATUS" == "ok" ]]; then
+    echo "[INFO ] 2/2 checks passed. Terminating EC2 instance: $INSTANCE_ID"
+    aws ec2 terminate-instances --instance-ids "$INSTANCE_ID" --region "$REGION" > /dev/null
+    echo "[INFO] Waiting for EC2 instance to terminate..."
+    aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID" --region "$REGION"
+    echo "[INFO] Instance terminated."
+  else
+    echo "[WARN ] Instance $INSTANCE_ID did not pass status checks (System: $SYSTEM_STATUS, Instance: $INSTANCE_STATUS). Skipping termination."
+  fi
 else
-  echo "[INFO] No running instance found with tag '$AGENT_TAG'."
+  echo "[INFO ] No running instance found with tag '$AGENT_TAG'."
 fi
 
-echo "[INFO $(date +%T)] Checking Instance Profile: $AGENT_PROFILE_NAME"
+
+echo "[INFO ] Checking Instance Profile: $AGENT_PROFILE_NAME"
 if aws iam get-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" > /dev/null 2>&1; then
   echo "[INFO] Detaching role from instance profile..."
   aws iam remove-role-from-instance-profile \
@@ -41,7 +56,7 @@ else
   echo "[INFO] Instance profile not found."
 fi
 
-echo "[INFO $(date +%T)] Checking IAM Role: $AGENT_ROLE_NAME"
+echo "[INFO ] Checking IAM Role: $AGENT_ROLE_NAME"
 if aws iam get-role --role-name "$AGENT_ROLE_NAME" > /dev/null 2>&1; then
   echo "[INFO] Detaching policy..."
   aws iam detach-role-policy \
@@ -60,7 +75,7 @@ else
   echo "[INFO] IAM Role not found."
 fi
 
-echo "[INFO $(date +%T)] Checking Security Group '$AGENT_SG_NAME'..."
+echo "[INFO ] Checking Security Group '$AGENT_SG_NAME'..."
 SG_ID=$(aws ec2 describe-security-groups --region "$REGION" \
   --filters "Name=group-name,Values=$AGENT_SG_NAME" \
   --query "SecurityGroups[0].GroupId" --output text 2>/dev/null)
@@ -78,4 +93,36 @@ else
   echo "[INFO] No matching Security Group found."
 fi
 
-echo "[INFO $(date +%T)] Cleanup complete. All ephemeral Jenkins agent resources have been destroyed."
+# -------------------- Volúmenes EBS huérfanos --------------------
+echo "[INFO ] Checking for orphaned EBS volumes with tag '$AGENT_TAG'..."
+VOLUME_IDS=$(aws ec2 describe-volumes --region "$REGION" \
+  --filters "Name=tag:Name,Values=$AGENT_TAG" "Name=status,Values=available" \
+  --query "Volumes[].VolumeId" --output text)
+
+if [[ -n "$VOLUME_IDS" ]]; then
+  for VOLUME_ID in $VOLUME_IDS; do
+    echo "[INFO] Deleting EBS volume: $VOLUME_ID"
+    aws ec2 delete-volume --region "$REGION" --volume-id "$VOLUME_ID"
+  done
+else
+  echo "[INFO] No orphaned EBS volumes found."
+fi
+
+# -------------------- Interfaces de Red (ENIs) huérfanas --------------------
+echo "[INFO ] Checking for orphaned ENIs with tag '$AGENT_TAG'..."
+ENI_IDS=$(aws ec2 describe-network-interfaces --region "$REGION" \
+  --filters "Name=tag:Name,Values=$AGENT_TAG" "Name=status,Values=available" \
+  --query "NetworkInterfaces[].NetworkInterfaceId" --output text)
+
+if [[ -n "$ENI_IDS" ]]; then
+  for ENI_ID in $ENI_IDS; do
+    echo "[INFO] Deleting Network Interface: $ENI_ID"
+    aws ec2 delete-network-interface --region "$REGION" --network-interface-id "$ENI_ID"
+  done
+else
+  echo "[INFO] No orphaned network interfaces found."
+fi
+
+
+
+echo "[INFO ] Cleanup complete. All ephemeral Jenkins agent resources have been destroyed."

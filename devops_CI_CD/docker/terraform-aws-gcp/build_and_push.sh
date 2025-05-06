@@ -3,7 +3,7 @@ set -e
 
 # ---------- Configuration ----------
 DOCKER_HUB_USER="hescobarsanchez"    # Change this to your Docker Hub username
-IMAGE_NAME="jenkins-agent"           # Name of the image
+IMAGE_NAME="terraform-agent"           # Name of the image
 IMAGE_TAG="latest"                   # Image tag/version
 DOCKERFILE_PATH="."                  # Path to the Dockerfile (default: current directory)
 

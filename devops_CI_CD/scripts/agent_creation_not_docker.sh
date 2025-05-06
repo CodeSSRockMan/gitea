@@ -93,14 +93,24 @@ else
   echo "[INFO] Role already associated with instance profile."
 fi
 
-echo "[INFO] Waiting for instance profile propagation..."
+echo "[INFO] Waiting until instance profile is ready to be used in EC2..."
+
 for i in {1..30}; do
-  PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" \
-    --query 'InstanceProfile.Arn' --output text 2>/dev/null)
-  [[ "$PROFILE_ARN" != "None" && -n "$PROFILE_ARN" ]] \
-    && { echo "[INFO] Instance Profile ready: $PROFILE_ARN"; break; } \
-    || { echo "[INFO] Waiting for propagation ($i)..."; sleep 5; }
+  PROFILE_READY=$(aws ec2 describe-iam-instance-profile-associations \
+    --query "IamInstanceProfileAssociations[?IamInstanceProfile.Arn=='$PROFILE_ARN']" \
+    --region "$REGION" \
+    --output text 2>/dev/null)
+
+  if [[ -n "$PROFILE_READY" ]]; then
+    echo "[INFO] Instance profile is now visible to EC2."
+    break
+  else
+    echo "[INFO] Waiting for EC2 to recognize profile ($i)..."
+    sleep 5
+  fi
 done
+
+
 
 echo "[INFO] Launching EC2 instance for Jenkins agent..."
 

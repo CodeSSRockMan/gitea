@@ -37,4 +37,4 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.c
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set default shell (Jenkins executes commands here)
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["/bin/bash", "-c", "tail -f /dev/null"]

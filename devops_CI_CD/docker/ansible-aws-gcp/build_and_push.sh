@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ---------- Configuration ----------
 DOCKERHUB_USER="hescobarsanchez"          # Your Docker Hub username
-IMAGE_NAME="ansible-aws-gcp"               # Docker image name
+IMAGE_NAME="ansible-agent"               # Docker image name
 IMAGE_TAG="latest"                         # Image tag/version
 DOCKERFILE_DIR="."                         # Path to Dockerfile directory
 

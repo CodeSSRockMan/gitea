@@ -38,4 +38,4 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.c
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ---------- Default shell ----------
-ENTRYPOINT ["/bin/bash"]
+    ENTRYPOINT ["/bin/bash", "-c", "tail -f /dev/null"]
