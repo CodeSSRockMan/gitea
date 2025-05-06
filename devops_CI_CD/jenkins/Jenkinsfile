@@ -1,9 +1,26 @@
 pipeline {
   agent any
+
   stages {
-    stage('Check Jenkins Master') {
+    stage('Create ephemeral EC2') {
       steps {
-        sh 'bash devops_CI_CD/scripts/init_docker_agent.sh'
+        sh 'bash devops_CI_CD/scripts/create_ephemeral_ec2.sh'
+        script {
+          def envVars = readFile('ephemeral_instance_env.txt').split('\n')
+          envVars.each {
+            def (key, value) = it.tokenize('=')
+            env[key] = value
+          }
+        }
+      }
+    }
+
+    stage('Install and Run Agent') {
+      steps {
+        sh '''
+          echo "Running agent in instance $INSTANCE_ID"
+          bash devops_CI_CD/scripts/init_docker_agent.sh "$INSTANCE_ID" "$SG_ID"
+        '''
       }
     }
   }
