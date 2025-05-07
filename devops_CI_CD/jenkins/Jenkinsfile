@@ -1,108 +1,40 @@
 pipeline {
     agent any
 
-    options {
-        timestamps()
-        skipDefaultCheckout(true)
-    }
-
     environment {
-        AWS_REGION   = 'us-east-1'
-        SCRIPTS_PATH = 'devops_CI_CD/scripts'
-        ANSIBLE_PATH = 'devops_CI_CD/ansible'
+        AWS_REGION = 'us-east-1'
+        INSTANCE_ID = 'i-0123456789abcdef0' // Reemplaza con tu ID de instancia EC2
+        CONTAINER_NAME = 'jenkins-agent'
     }
 
     stages {
-        stage('Sparse Checkout') {
+        stage('Ejecutar Ansible en contenedor Docker vía SSM') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    userRemoteConfigs: scm.userRemoteConfigs,
-                    branches: scm.branches,
-                    extensions: [
-                        [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
-                            [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
-                            [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
-                        ]]
-                    ]
-                ])
-            }
-        }
-
-        stage('Bootstrap EC2 Agent') {
-            steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
-                ]) {
-                    dir(env.SCRIPTS_PATH) {
-                        sh 'bash ./ec2_container_setup.sh'
-                    }
-                }
-            }
-        }
-
-        stage('Run Ansible Playbook via SSM') {
-            steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
-                ]) {
-                    dir(env.SCRIPTS_PATH) {
-                        sh '''
-                            bash -c '
-                                echo "[INFO] Reading ephemeral instance ID..."
-                                source ephem_env.txt
-                                echo "Loaded AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID"
-
-                                echo "[INFO] Running Ansible playbook inside container..."
-                                COMMAND_ID=$(aws ssm send-command \
-                                    --region "$AWS_REGION" \
-                                    --instance-ids "$AGENT_INSTANCE_ID" \
-                                    --document-name "AWS-RunShellScript" \
-                                    --comment "Run Ansible playbook in container" \
-                                    --parameters commands="[\\\"echo 'Starting Ansible inside container'\\\",\\\"sudo docker exec jenkins-agent bash -lc \'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost\'\\\"]" \
-                                    --query "Command.CommandId" \
-                                    --output text)
-
-                                echo "[INFO] Sent SSM command, CommandId=$COMMAND_ID"
-                                echo "$COMMAND_ID" > command_id.txt
-                                echo "[INFO] Ansible playbook command sent, CommandId=$COMMAND_ID"
-                            '
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Wait for Ansible Playbook Completion') {
-            steps {
-                dir(env.SCRIPTS_PATH) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
-                        COMMAND_ID=$(cat command_id.txt)
-                        echo "[INFO] Waiting for command $COMMAND_ID to complete..."
-                        STATUS=$(aws ssm list-commands --command-id "$COMMAND_ID" --query "Commands[0].Status" --output text)
-                        echo "Ansible playbook command status: $STATUS"
+                        echo "[INFO] Enviando comando SSM para ejecutar Ansible en contenedor Docker..."
+                        COMMAND_ID=$(aws ssm send-command \
+                            --region "$AWS_REGION" \
+                            --instance-ids "$INSTANCE_ID" \
+                            --document-name "AWS-RunShellScript" \
+                            --comment "Ejecutar Ansible en contenedor Docker" \
+                            --parameters commands='[
+                                "echo Iniciando ejecución de Ansible en contenedor...",
+                                "sudo docker exec $CONTAINER_NAME bash -c \\'ansible-playbook -i inventory/hosts playbook.yml\\'"
+                            ]' \
+                            --query "Command.CommandId" \
+                            --output text)
+
+                        echo "[INFO] Comando SSM enviado. Command ID: $COMMAND_ID"
+
+                        echo "[INFO] Esperando a que el comando SSM se complete..."
+                        aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --region "$AWS_REGION"
+
+                        echo "[INFO] Recuperando salida del comando SSM..."
+                        aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --region "$AWS_REGION"
                     '''
                 }
             }
-        }
-
-        /*
-        stage('Cleanup') {
-            steps {
-                dir(env.SCRIPTS_PATH) {
-                    sh 'bash ./cleanup.sh'
-                }
-            }
-        }
-        */
-    }
-
-    post {
-        success {
-            echo 'Pipeline completed successfully.'
-        }
-        failure {
-            echo 'Pipeline failed.'
         }
     }
 }
