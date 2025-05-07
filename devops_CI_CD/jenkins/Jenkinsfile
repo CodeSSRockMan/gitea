@@ -42,19 +42,6 @@ pipeline {
             }
         }
 
-        stage('Load Ephemeral Agent Env') {
-            steps {
-                dir(env.SCRIPTS_PATH) {
-                    script {
-                        def props = readProperties file: 'ephem_env.txt'
-                        withEnv(["AGENT_ID=${props.AGENT_ID}"]) {
-                            echo "Loaded AGENT_ID=${env.AGENT_ID}"
-                        }
-                    }
-                }
-            }
-        }
-
         stage('Run Ansible Playbook via SSM') {
             steps {
                 withCredentials([[ 
@@ -62,16 +49,22 @@ pipeline {
                     credentialsId: 'aws-credentials' 
                 ]]) {
                     dir(env.SCRIPTS_PATH) {
+                        script {
+                            def props = readProperties file: 'ephem_env.txt'
+                            env.AGENT_ID = props.AGENT_INSTANCE_ID
+                            echo "Loaded AGENT_ID=${env.AGENT_ID}"
+                        }
+
                         sh '''
                           echo "[INFO] Running Ansible playbook inside container..."
                           COMMAND_ID=$(aws ssm send-command \
                             --region "$AWS_REGION" \
-                            --instance-ids "$env.AGENT_ID" \
+                            --instance-ids "$AGENT_ID" \
                             --document-name "AWS-RunShellScript" \
                             --comment "Run Ansible playbook in container" \
-                            --parameters commands="[
-                              \\"echo 'Starting Ansible inside container'\\",
-                              \\"sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'\\"  
+                            --parameters commands="[\
+                              \\"echo 'Starting Ansible inside container'\\",\
+                              \\"sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'\\"\
                             ]" \
                             --query "Command.CommandId" \
                             --output text)
@@ -82,6 +75,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Wait for Ansible Playbook Completion') {
             steps {
