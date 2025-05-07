@@ -65,7 +65,7 @@ pipeline {
                         sh '''
                           echo "[INFO] Running Ansible playbook inside container..."
                           COMMAND_ID=$(aws ssm send-command \
-                            --region "$REGION" \
+                            --region "$AWS_REGION" \
                             --instance-ids "$AGENT_INSTANCE_ID" \
                             --document-name "AWS-RunShellScript" \
                             --comment "Run Ansible playbook in container" \
