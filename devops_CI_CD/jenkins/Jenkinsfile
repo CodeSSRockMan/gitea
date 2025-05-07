@@ -39,7 +39,7 @@ pipeline {
                     }
                 }
             }
-        } 
+        }
 
         stage('Run Ansible Playbook via SSM') {
             steps {
@@ -48,22 +48,25 @@ pipeline {
                 ]) {
                     dir(env.SCRIPTS_PATH) {
                         sh '''
-                            echo "[INFO] Reading ephemeral instance ID..."
-                            source ephem_env.txt
-                            echo "Loaded AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID"
+                            bash -c '
+                                echo "[INFO] Reading ephemeral instance ID..."
+                                source ephem_env.txt
+                                echo "Loaded AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID"
 
-                            echo "[INFO] Running Ansible playbook inside container..."
-                            COMMAND_ID=$(aws ssm send-command \
-                                --region "$AWS_REGION" \
-                                --instance-ids "$AGENT_INSTANCE_ID" \
-                                --document-name "AWS-RunShellScript" \
-                                --comment "Run Ansible playbook in container" \
-                                --parameters commands="[\\\"echo 'Starting Ansible inside container'\\\",\\\"sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'\\\"]" \
-                                --query "Command.CommandId" \
-                                --output text)
+                                echo "[INFO] Running Ansible playbook inside container..."
+                                COMMAND_ID=$(aws ssm send-command \
+                                    --region "$AWS_REGION" \
+                                    --instance-ids "$AGENT_INSTANCE_ID" \
+                                    --document-name "AWS-RunShellScript" \
+                                    --comment "Run Ansible playbook in container" \
+                                    --parameters commands="[\\\"echo 'Starting Ansible inside container'\\\",\\\"sudo docker exec jenkins-agent bash -lc \'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost\'\\\"]" \
+                                    --query "Command.CommandId" \
+                                    --output text)
 
-                            echo "[INFO] Sent SSM command, CommandId=$COMMAND_ID"
-                            echo "$COMMAND_ID" > command_id.txt
+                                echo "[INFO] Sent SSM command, CommandId=$COMMAND_ID"
+                                echo "$COMMAND_ID" > command_id.txt
+                                echo "[INFO] Ansible playbook command sent, CommandId=$COMMAND_ID"
+                            '
                         '''
                     }
                 }
