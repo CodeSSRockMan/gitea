@@ -44,9 +44,9 @@ pipeline {
 
         stage('Run Ansible Playbook via SSM') {
             steps {
-                withCredentials([[ 
-                    $class: 'AmazonWebServicesCredentialsBinding', 
-                    credentialsId: 'aws-credentials' 
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
                 ]]) {
                     dir(env.SCRIPTS_PATH) {
                         script {
@@ -73,7 +73,6 @@ pipeline {
             }
         }
 
-
         stage('Wait for Ansible Playbook Completion') {
             steps {
                 script {
@@ -86,15 +85,17 @@ pipeline {
             }
         }
 
-  /*      stage('Cleanup') {
+        /*
+        stage('Cleanup') {
             steps {
                 dir(env.SCRIPTS_PATH) {
                     sh 'bash ./cleanup.sh'
                 }
             }
         }
+        */
     }
-*/
+
     post {
         always {
             cleanWs()
