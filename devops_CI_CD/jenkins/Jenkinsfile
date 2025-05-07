@@ -48,9 +48,10 @@ pipeline {
                     script {
                         def props = readProperties file: 'ephem_env.txt'
                         withEnv([
-                          "AGENT_ID=${props.AGENT_ID}",
-                      ]) {
-                        echo "Loaded AGENT_ID=${env.AGENT_ID}"
+                            "AGENT_ID=${props.AGENT_ID}"
+                        ]) {
+                            echo "Loaded AGENT_ID=${env.AGENT_ID}"
+                        }
                     }
                 }
             }
