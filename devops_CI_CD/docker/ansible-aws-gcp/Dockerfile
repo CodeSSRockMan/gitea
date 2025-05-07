@@ -37,5 +37,8 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.c
  && apt-get install -y google-cloud-sdk \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ---------- Default shell ----------
-    ENTRYPOINT ["/bin/bash", "-c", "tail -f /dev/null"]
+# ---------- Default command to keep container alive ----------
+     
+ENTRYPOINT ["/bin/bash", "-c", "tail -f /dev/null"]
+
+    
