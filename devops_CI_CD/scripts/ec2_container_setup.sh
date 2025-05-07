@@ -138,15 +138,7 @@ COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INST
     \"sudo docker run -d --name jenkins-agent ${IMAGE_REF}\"
   ]" --query "Command.CommandId" --output text)
 
-echo "[INFO] Waiting for container to launch..."
-for i in {1..20}; do
-  STATUS=$(aws ssm list-command-invocations --region "$REGION" \
-    --command-id "$COMMAND_ID" --details \
-    --query "CommandInvocations[0].Status" --output text)
 
-  [[ "$STATUS" == "Success" ]] && { echo "[SUCCESS] Container launched successfully."; break; } \
-  || { echo "[INFO] Status: $STATUS (attempt $i)..."; sleep 5; }
-done
 
 echo "[INFO] Waiting for container to launch…"
 for i in {1..20}; do
