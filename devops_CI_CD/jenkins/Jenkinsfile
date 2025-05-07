@@ -31,7 +31,10 @@ pipeline {
 
         stage('Bootstrap EC2 Agent') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
                     dir(env.SCRIPTS_PATH) {
                         sh 'bash ./ec2_container_setup.sh'
                     }
@@ -54,22 +57,24 @@ pipeline {
 
         stage('Run Ansible Playbook via SSM') {
             steps {
-                  withCredentials([[
-                $class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials'
-            ]]) {
-                script {
-                    def ansibleCmd = 'sudo docker exec jenkins-agent bash -c \\\"ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost\\\"'
-                    def jsonCmd = "[\"${ansibleCmd}\"]"
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
+                    script {
+                        def ansibleCmd = 'sudo docker exec jenkins-agent bash -lc "ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost"'
+                        def jsonCmd    = "'commands=[\"${ansibleCmd.replace('\"','\\\"')}\"]'"
 
-                    sh """
-                    aws ssm send-command \
-                      --region ${env.AWS_REGION} \
-                      --instance-ids ${env.AGENT_ID} \
-                      --document-name "AWS-RunShellScript" \
-                      --comment "Run Ansible inside container" \
-                      --parameters commands=${jsonCmd} \
-                      --query "Command.CommandId" --output text
-                    """
+                        sh """
+                        aws ssm send-command \\
+                          --region ${env.AWS_REGION} \\
+                          --instance-ids ${env.AGENT_ID} \\
+                          --document-name "AWS-RunShellScript" \\
+                          --comment "Run Ansible inside container" \\
+                          --parameters ${jsonCmd} \\
+                          --query "Command.CommandId" --output text
+                        """
+                    }
                 }
             }
         }
