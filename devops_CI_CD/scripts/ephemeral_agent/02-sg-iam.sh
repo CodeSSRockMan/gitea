@@ -1,0 +1,56 @@
+#!/bin/bash
+set -e
+
+# Load configuration and previous state
+source env.sh
+source "$STATE_FILE"
+
+echo "[INFO] Looking for an existing ephemeral agent instance..."
+EXISTING_AGENT=$(aws ec2 describe-instances \
+  --region "$REGION" \
+  --filters "Name=tag:Name,Values=$AGENT_TAG" "Name=instance-state-name,Values=running" \
+  --query "Reservations[0].Instances[0].InstanceId" --output text 2>/dev/null)
+
+if [[ -n "$EXISTING_AGENT" && "$EXISTING_AGENT" != "None" ]]; then
+  echo "[INFO] Reusing existing agent instance: $EXISTING_AGENT"
+  AGENT_INSTANCE_ID="$EXISTING_AGENT"
+else
+  echo "[INFO] Launching new ephemeral EC2 instance..."
+  AGENT_INSTANCE_ID=$(aws ec2 run-instances \
+    --region "$REGION" \
+    --image-id "$AMI_ID" \
+    --instance-type "t3.micro" \
+    --subnet-id "$SUBNET_ID" \
+    --security-group-ids "$AGENT_SG_ID" \
+    --iam-instance-profile Arn="$PROFILE_ARN" \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$AGENT_TAG}]" \
+    --query "Instances[0].InstanceId" --output text)
+
+  echo "[INFO] Waiting for the instance to enter 'running' state..."
+  for i in {1..30}; do
+    STATE=$(aws ec2 describe-instances \
+      --region "$REGION" \
+      --instance-ids "$AGENT_INSTANCE_ID" \
+      --query "Reservations[0].Instances[0].State.Name" --output text)
+    if [[ "$STATE" == "running" ]]; then
+      echo "[INFO] Instance is now running."
+      break
+    fi
+    echo "[INFO] Current state: $STATE (retry $i/30)"
+    sleep 5
+  done
+fi
+
+# Fetch private IP for downstream use
+AGENT_IP=$(aws ec2 describe-instances \
+  --region "$REGION" \
+  --instance-ids "$AGENT_INSTANCE_ID" \
+  --query "Reservations[0].Instances[0].PrivateIpAddress" --output text)
+
+# Append to state file for the next steps
+cat >> "$STATE_FILE" <<EOF
+AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID
+AGENT_IP=$AGENT_IP
+EOF
+
+echo "[INFO] Agent instance is ready: ID=$AGENT_INSTANCE_ID, IP=$AGENT_IP"

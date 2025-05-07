@@ -118,6 +118,7 @@ COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INST
     \"sudo systemctl enable docker\",
     \"sudo systemctl start docker\",
     \"docker --version\",
+    \"docker rm -f jenkins-agent || true\",    
     \"sudo docker run -d --name jenkins-agent ${IMAGE_REF}\"
   ]" --query "Command.CommandId" --output text)
 
@@ -130,6 +131,34 @@ for i in {1..20}; do
   [[ "$STATUS" == "Success" ]] && { echo "[SUCCESS] Container launched successfully."; break; } \
   || { echo "[INFO] Status: $STATUS (attempt $i)..."; sleep 5; }
 done
+
+echo "[INFO] Waiting for container to launch…"
+for i in {1..20}; do
+  STATUS=$(aws ssm list-command-invocations …)
+  [[ "$STATUS" == "Success" ]] && { echo "[SUCCESS] Container launched."; break; }
+  echo "[INFO] Status: $STATUS (attempt $i)…"; sleep 5
+done
+
+# ---------- HEALTH-CHECK THE DOCKER CONTAINER ----------
+echo "[INFO] Verifying container is running]"
+HEALTH_ID=$(aws ssm send-command \
+  --region "$REGION" \
+  --instance-ids "$AGENT_INSTANCE_ID" \
+  --document-name "AWS-RunShellScript" \
+  --parameters commands='["docker inspect -f {{.State.Running}} jenkins-agent"]' \
+  --query "Command.CommandId" --output text)
+
+# wait until docker inspect returns “true”
+for i in {1..10}; do
+  ALIVE=$(aws ssm list-command-invocations \
+    --region "$REGION" \
+    --command-id "$HEALTH_ID" \
+    --details \
+    --query "CommandInvocations[0].CommandPlugins[0].Output" --output text)
+  [[ "$ALIVE" == "true" ]] && { echo "[SUCCESS] Container is healthy."; break; }
+  echo "[WARN] Container not healthy yet ($i)…"; sleep 3
+done
+
 
 # ---------- TOOL VERSION CHECK ----------
 echo "[INFO] Checking tool versions inside container..."
@@ -160,3 +189,7 @@ for i in {1..20}; do
     sleep 5
   fi
 done
+
+# ---------- GET INSTANCE INFO ----------
+echo "AGENT_ID=$AGENT_INSTANCE_ID" > ephem_env.txt
+
