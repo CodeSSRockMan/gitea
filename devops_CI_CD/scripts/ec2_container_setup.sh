@@ -129,7 +129,7 @@ echo "[INFO] Installing Docker and launching Jenkins agent container..."
 COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
   --document-name "AWS-RunShellScript" --comment "Start Jenkins agent container" \
   --parameters commands="[ 
-    \"if ! systemctl is-active --quiet docker; then\",
+    \"if ! sudo systemctl is-active --quiet docker; then\",
     \"  echo '[INFO] Installing Docker...'\",
     \"  sudo apt update\",
     \"  sudo apt install -y docker.io\",
@@ -138,8 +138,8 @@ COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INST
     \"else\",
     \"  echo '[INFO] Docker already running.'\",
     \"fi\",
-    \"docker --version\",
-    \"docker rm -f jenkins-agent || true\",
+    \"sudo docker --version\",
+    \"sudo docker rm -f jenkins-agent || true\",
     \"sudo docker run -d --name jenkins-agent --entrypoint tail ${IMAGE_REF} -f /dev/null\"
   ]" --query "Command.CommandId" --output text)
 
