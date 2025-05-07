@@ -77,6 +77,13 @@ aws iam get-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" > /de
 aws iam add-role-to-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" \
   --role-name "$AGENT_ROLE_NAME" > /dev/null 2>&1 || echo "[INFO] Role already associated."
 
+# Wait for the instance profile to propagate before fetching its ARN
+echo "[INFO] Waiting for instance profile propagation..."
+for i in {1..10}; do
+  aws iam get-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" > /dev/null 2>&1 && break
+  echo "[INFO] Still waiting... ($i/10)"; sleep 5
+done  
+
 PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" \
   --query "InstanceProfile.Arn" --output text)
 
@@ -107,6 +114,15 @@ else
   done
 fi
 
+echo "[INFO] Waiting for instance to be managed by SSM..."
+for i in {1..20}; do
+  MANAGED=$(aws ssm describe-instance-information \
+    --region "$REGION" \
+    --query "InstanceInformationList[?InstanceId=='$AGENT_INSTANCE_ID'] | length(@)" \
+    --output text)
+  [[ "$MANAGED" -eq 1 ]] && { echo "[SUCCESS] Instance is now managed by SSM."; break; }
+  echo "[INFO] Still not managed (attempt $i)..."; sleep 6
+done
 
 # ---------- INSTALL DOCKER AND START CONTAINER ----------
 echo "[INFO] Installing Docker and launching Jenkins agent container..."
