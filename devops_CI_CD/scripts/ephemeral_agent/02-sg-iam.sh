@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 set -e
 
 # Load environment and previous state
@@ -14,53 +13,67 @@ grep -v 'PASSWORD' "$STATE_FILE" | while read -r line; do
   echo "  $line"
 done
 
+# ---------- SECURITY GROUP ----------
+echo "[INFO] Checking agent Security Group..."
+AGENT_SG_ID=$(aws ec2 describe-security-groups --region "$REGION" \
+  --filters "Name=group-name,Values=$AGENT_SG_NAME" "Name=vpc-id,Values=$VPC_ID" \
+  --query "SecurityGroups[0].GroupId" --output text 2>/dev/null)
 
-echo "[INFO] Looking for an existing ephemeral agent instance..."
-EXISTING_AGENT=$(aws ec2 describe-instances \
-  --region "$REGION" \
-  --filters "Name=tag:Name,Values=$AGENT_TAG" "Name=instance-state-name,Values=running" \
-  --query "Reservations[0].Instances[0].InstanceId" --output text 2>/dev/null)
+if [[ -z "$AGENT_SG_ID" || "$AGENT_SG_ID" == "None" ]]; then
+  echo "[INFO] Creating new Security Group..."
+  AGENT_SG_ID=$(aws ec2 create-security-group --region "$REGION" \
+    --group-name "$AGENT_SG_NAME" \
+    --description "Jenkins Agent SG" \
+    --vpc-id "$VPC_ID" \
+    --query 'GroupId' --output text)
 
-if [[ -n "$EXISTING_AGENT" && "$EXISTING_AGENT" != "None" ]]; then
-  echo "[INFO] Reusing existing agent instance: $EXISTING_AGENT"
-  AGENT_INSTANCE_ID="$EXISTING_AGENT"
+  aws ec2 authorize-security-group-egress --region "$REGION" \
+    --group-id "$AGENT_SG_ID" --protocol -1 --cidr 0.0.0.0/0 \
+    2>/dev/null || echo "[WARN] Egress rule may already exist."
 else
-  echo "[INFO] Launching new ephemeral EC2 instance..."
-  AGENT_INSTANCE_ID=$(aws ec2 run-instances \
-    --region "$REGION" \
-    --image-id "$AMI_ID" \
-    --instance-type "t3.micro" \
-    --subnet-id "$SUBNET_ID" \
-    --security-group-ids "$AGENT_SG_ID" \
-    --iam-instance-profile Arn="$PROFILE_ARN" \
-    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$AGENT_TAG}]" \
-    --query "Instances[0].InstanceId" --output text)
-
-  echo "[INFO] Waiting for the instance to enter 'running' state..."
-  for i in {1..30}; do
-    STATE=$(aws ec2 describe-instances \
-      --region "$REGION" \
-      --instance-ids "$AGENT_INSTANCE_ID" \
-      --query "Reservations[0].Instances[0].State.Name" --output text)
-    if [[ "$STATE" == "running" ]]; then
-      echo "[INFO] Instance is now running."
-      break
-    fi
-    echo "[INFO] Current state: $STATE (retry $i/30)"
-    sleep 5
-  done
+  echo "[INFO] Using existing Security Group: $AGENT_SG_ID"
 fi
 
-# Fetch private IP for downstream use
-AGENT_IP=$(aws ec2 describe-instances \
-  --region "$REGION" \
-  --instance-ids "$AGENT_INSTANCE_ID" \
-  --query "Reservations[0].Instances[0].PrivateIpAddress" --output text)
+# ---------- IAM ROLE & INSTANCE PROFILE ----------
+echo "[INFO] Verifying IAM role and instance profile..."
+aws iam get-role --role-name "$AGENT_ROLE_NAME" > /dev/null 2>&1 || {
+  echo "[INFO] Creating IAM role..."
+  aws iam create-role --role-name "$AGENT_ROLE_NAME" \
+    --assume-role-policy-document file://<(cat <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Service": "ec2.amazonaws.com" },
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+) > /dev/null
+}
 
-# Append to state file for the next steps
+aws iam attach-role-policy --role-name "$AGENT_ROLE_NAME" \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore > /dev/null || true
+
+aws iam get-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" > /dev/null 2>&1 || {
+  echo "[INFO] Creating instance profile..."
+  aws iam create-instance-profile --instance-profile-name "$AGENT_PROFILE_NAME" > /dev/null
+  sleep 5
+}
+
+aws iam add-role-to-instance-profile \
+  --instance-profile-name "$AGENT_PROFILE_NAME" \
+  --role-name "$AGENT_ROLE_NAME" > /dev/null 2>&1 || echo "[INFO] Role already associated."
+
+PROFILE_ARN=$(aws iam get-instance-profile \
+  --instance-profile-name "$AGENT_PROFILE_NAME" \
+  --query "InstanceProfile.Arn" --output text)
+
+# ---------- Save output variables ----------
 cat >> "$STATE_FILE" <<EOF
-AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID
-AGENT_IP=$AGENT_IP
+AGENT_SG_ID=$AGENT_SG_ID
+PROFILE_ARN=$PROFILE_ARN
 EOF
 
-echo "[INFO] Agent instance is ready: ID=$AGENT_INSTANCE_ID, IP=$AGENT_IP"
+echo "[INFO] Security Group and IAM configuration completed."
+echo "[INFO] Saved: AGENT_SG_ID=$AGENT_SG_ID, PROFILE_ARN=$PROFILE_ARN"
