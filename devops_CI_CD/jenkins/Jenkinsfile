@@ -55,7 +55,7 @@ pipeline {
                             echo "Loaded AGENT_ID=${env.AGENT_ID}"
                         }
 
-                        sh '''
+                        sh """
                           echo "[INFO] Running Ansible playbook inside container..."
                           COMMAND_ID=$(aws ssm send-command \
                             --region "$AWS_REGION" \
@@ -70,7 +70,7 @@ pipeline {
                             --output text)
 
                           echo "[INFO] Sent SSM command, CommandId=$COMMAND_ID"
-                        '''
+                        """
                     }
                 }
             }
