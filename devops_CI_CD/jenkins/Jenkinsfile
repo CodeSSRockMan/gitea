@@ -2,10 +2,10 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
-        INSTANCE_ID = 'i-0123456789abcdef0' // Reemplaza con tu ID de instancia EC2
+        AWS_REGION     = 'us-east-1'
+        INSTANCE_ID    = 'i-0123456789abcdef0' // Reemplaza con tu ID real
         CONTAINER_NAME = 'jenkins-agent'
-        SCRIPTS_PATH = 'devops_CI_CD/scripts'
+        SCRIPTS_PATH   = 'devops_CI_CD/scripts'
     }
 
     stages {
@@ -18,19 +18,31 @@ pipeline {
                         sh '''
                             echo "[INFO] Reading ephemeral instance ID..."
                             AGENT_INSTANCE_ID=$(grep AGENT_INSTANCE_ID ephem_env.txt | cut -d "=" -f2)
-                            echo "Loaded AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID"
 
-                            echo "[INFO] Enviando comando SSM para ejecutar Ansible en contenedor Docker..."
+                            if [ -z "$AGENT_INSTANCE_ID" ]; then
+                                echo "[ERROR] AGENT_INSTANCE_ID not found in ephem_env.txt"
+                                exit 1
+                            fi
 
+                            echo "[INFO] Loaded AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID"
+
+                            echo "[INFO] Creating SSM commands JSON..."
+                            cat > commands.json <<EOF
+{
+  "commands": [
+    "echo Starting Ansible playbook...",
+    "sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'"
+  ]
+}
+EOF
+
+                            echo "[INFO] Sending SSM command..."
                             COMMAND_ID=$(aws ssm send-command \
                               --region "$AWS_REGION" \
                               --instance-ids "$AGENT_INSTANCE_ID" \
                               --document-name "AWS-RunShellScript" \
-                              --comment "Run Ansible" \
-                              --parameters commands='[
-                                "echo Starting Ansible playbook...",
-                                "sudo docker exec jenkins-agent bash -lc \\'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost\\'"
-                              ]' \
+                              --comment "Run Ansible Playbook" \
+                              --parameters file://commands.json \
                               --query "Command.CommandId" \
                               --output text)
 
