@@ -29,7 +29,7 @@ pipeline {
             }
         }
 
- /*       stage('Bootstrap EC2 Agent') {
+        stage('Bootstrap EC2 Agent') {
             steps {
                 withCredentials([
                     [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
@@ -39,7 +39,7 @@ pipeline {
                     }
                 }
             }
-        } */
+        } 
 
         stage('Run Ansible Playbook via SSM') {
             steps {
