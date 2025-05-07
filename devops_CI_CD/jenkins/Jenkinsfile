@@ -44,9 +44,9 @@ pipeline {
 
         stage('Run Ansible Playbook via SSM') {
             steps {
-                withCredentials([[ 
-                    $class: 'AmazonWebServicesCredentialsBinding', 
-                    credentialsId: 'aws-credentials' 
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
                 ]]) {
                     dir(env.SCRIPTS_PATH) {
                         script {
@@ -56,31 +56,30 @@ pipeline {
                         }
 
                         sh """
-                          echo "[INFO] Running Ansible playbook inside container..."
-                          COMMAND_ID=$(aws ssm send-command \
-                            --region "$AWS_REGION" \
-                            --instance-ids "$AGENT_ID" \
-                            --document-name "AWS-RunShellScript" \
-                            --comment "Run Ansible playbook in container" \
-                            --parameters commands="[\
-                              \\"echo 'Starting Ansible inside container'\\",\
-                              \\"sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'\\"\
-                            ]" \
-                            --query "Command.CommandId" \
-                            --output text)
+                            echo "[INFO] Running Ansible playbook inside container..."
+                            COMMAND_ID=\$(aws ssm send-command \
+                                --region "${env.AWS_REGION}" \
+                                --instance-ids "${env.AGENT_ID}" \
+                                --document-name "AWS-RunShellScript" \
+                                --comment "Run Ansible playbook in container" \
+                                --parameters commands="[\\"echo 'Starting Ansible inside container'\\",\\"sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'\\"]" \
+                                --query "Command.CommandId" \
+                                --output text)
 
-                          echo "[INFO] Sent SSM command, CommandId=$COMMAND_ID"
+                            echo "[INFO] Sent SSM command, CommandId=\$COMMAND_ID"
                         """
                     }
                 }
             }
         }
 
-
         stage('Wait for Ansible Playbook Completion') {
             steps {
                 script {
-                    def commandId = sh(script: 'aws ssm list-commands --query "Commands[?CommandId==`$COMMAND_ID`].Status" --output text', returnStdout: true).trim()
+                    def commandId = sh(
+                        script: 'aws ssm list-commands --query "Commands[?CommandId==\\`$COMMAND_ID\\`].Status" --output text',
+                        returnStdout: true
+                    ).trim()
                     echo "Ansible playbook command status: ${commandId}"
                 }
             }
@@ -93,7 +92,6 @@ pipeline {
                 }
             }
         }
-
     }
 
     post {
