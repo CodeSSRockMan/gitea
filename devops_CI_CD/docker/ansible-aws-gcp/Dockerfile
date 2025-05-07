@@ -39,6 +39,7 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.c
 
 # ---------- Default command to keep container alive ----------
      
-ENTRYPOINT ["/bin/bash", "-c", "tail -f /dev/null"]
+CMD ["/bin/bash", "-c", "tail -f /dev/null"]
+
 
     

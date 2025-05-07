@@ -128,15 +128,21 @@ done
 echo "[INFO] Installing Docker and launching Jenkins agent container..."
 COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
   --document-name "AWS-RunShellScript" --comment "Start Jenkins agent container" \
-  --parameters commands="[
-    \"sudo apt update\",
-    \"sudo apt install -y docker.io\",
-    \"sudo systemctl enable docker\",
-    \"sudo systemctl start docker\",
+  --parameters commands="[ 
+    \"if ! systemctl is-active --quiet docker; then\",
+    \"  echo '[INFO] Installing Docker...'\",
+    \"  sudo apt update\",
+    \"  sudo apt install -y docker.io\",
+    \"  sudo systemctl enable docker\",
+    \"  sudo systemctl start docker\",
+    \"else\",
+    \"  echo '[INFO] Docker already running.'\",
+    \"fi\",
     \"docker --version\",
-    \"docker rm -f jenkins-agent || true\",    
-    \"sudo docker run -d --name jenkins-agent ${IMAGE_REF}\"
+    \"docker rm -f jenkins-agent || true\",
+    \"sudo docker run -d --name jenkins-agent --entrypoint tail ${IMAGE_REF} -f /dev/null\"
   ]" --query "Command.CommandId" --output text)
+
 
 
 
@@ -178,11 +184,11 @@ COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INST
   --document-name "AWS-RunShellScript" --comment "Tool version check" \
   --parameters commands="[
     \"echo Terraform version:\",
-    \"docker exec jenkins-agent terraform version || echo 'Terraform not found'\",
+    \"sudo docker exec jenkins-agent terraform version || echo 'Terraform not found'\",
     \"echo AWS CLI version:\",
-    \"docker exec jenkins-agent aws --version || echo 'AWS CLI not found'\",
+    \"sudo docker exec jenkins-agent aws --version || echo 'AWS CLI not found'\",
     \"echo GCloud SDK version:\",
-    \"docker exec jenkins-agent gcloud version || echo 'GCloud not found'\"
+    \"sudo docker exec jenkins-agent gcloud version || echo 'GCloud not found'\"
   ]" --query "Command.CommandId" --output text)
 
 echo "[INFO] Waiting for version check output..."
