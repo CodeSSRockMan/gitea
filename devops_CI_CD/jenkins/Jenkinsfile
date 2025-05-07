@@ -1,94 +1,72 @@
 pipeline {
-    agent any
+  agent any
 
-    options {
-        // Show timestamps in the console log
-        timestamps()
-        // Skip the default checkout; we’ll do a sparse checkout
-        skipDefaultCheckout(true)
+  options {
+    timestamps()
+    skipDefaultCheckout(true)
+  }
+
+  environment {
+    AWS_REGION   = 'us-east-1'
+    SCRIPTS_PATH = 'devops_CI_CD/scripts/ephemeral_agent'
+    ANSIBLE_PATH = 'devops_CI_CD/ansible'
+  }
+
+  stages {
+    stage('Sparse Checkout') {
+      steps {
+        checkout([...])
+      }
     }
 
-    environment {
-        AWS_REGION   = 'us-east-1'
-        SCRIPTS_PATH = 'devops_CI_CD/scripts/ephemeral_agent'
-        ANSIBLE_PATH = 'devops_CI_CD/ansible'
+    stage('Bootstrap EC2 Agent') {
+      steps {
+        // Inject AWS creds into the shell environment
+        withCredentials([[
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: 'aws-credentials'
+        ]]) {
+          dir(env.SCRIPTS_PATH) {
+            sh 'chmod +x 0[1-7]-*.sh'
+            sh 'bash ./01-fetch-master.sh'
+            sh 'bash ./02-sg-iam.sh'
+            sh 'bash ./03-launch-agent.sh'
+            sh 'bash ./04-docker-run.sh'
+            sh 'bash ./05-health-check.sh'
+            sh 'bash ./06-version-check.sh'
+            sh 'bash ./07-export-env.sh'
+          }
+        }
+      }
     }
 
-    stages {
-        stage('Sparse Checkout') {
-            steps {
-                checkout([
-                    $class: 'GitSCM',
-                    userRemoteConfigs: scm.userRemoteConfigs,
-                    branches: scm.branches,
-                    extensions: [
-                        [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
-                            [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
-                            [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
-                        ]]
-                    ]
-                ])
-            }
-        }
-
-        stage('Bootstrap EC2 Agent') {
-            steps {
-                dir(env.SCRIPTS_PATH) {
-                    // Make our seven bootstrap scripts executable
-                    sh 'chmod +x 0[1-7]-*.sh'
-                    // Run each step in sequence
-                    sh 'bash ./01-fetch-master.sh'
-                    sh 'bash ./02-sg-iam.sh'
-                    sh 'bash ./03-launch-agent.sh'
-                    sh 'bash ./04-docker-run.sh'
-                    sh 'bash ./05-health-check.sh'
-                    sh 'bash ./06-version-check.sh'
-                    sh 'bash ./07-export-env.sh'
-                }
-            }
-        }
-
-        stage('Load Ephemeral Agent Env') {
-            steps {
-                dir(env.SCRIPTS_PATH) {
-                    script {
-                        // Read key=value pairs into env variables
-                        def props = readProperties file: 'ephem_env.txt'
-                        props.each { k, v -> env[k] = v }
-                        echo "Loaded AGENT_ID=${env.AGENT_ID}, AGENT_IP=${env.AGENT_IP}"
-                    }
-                }
-            }
-        }
-
-        stage('Run Ansible Playbook via SSM') {
-            steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    dir(env.ANSIBLE_PATH) {
-                        sh '''
-                            echo "Running Ansible against agent at $AGENT_IP..."
-                            source ../.venv/bin/activate
-
-                            ANSIBLE_HOST_KEY_CHECKING=False \
-                              ansible-playbook -i inventory/hosts playbook.yml \
-                              -e "ansible_host=$AGENT_IP"
-                        '''
-                    }
-                }
-            }
-        }
+    stage('Load Ephemeral Agent Env') {
+      steps { /* …unchanged… */ }
     }
 
-    post {
-        always {
-            // Clean up the workspace regardless of result
-            cleanWs()
+    stage('Run Ansible Playbook via SSM') {
+      steps {
+        withCredentials([[
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: 'aws-credentials'
+        ]]) {
+          dir(env.ANSIBLE_PATH) {
+            sh '''  
+              echo "Running Ansible against agent at $AGENT_IP..."
+              source ../.venv/bin/activate
+              ANSIBLE_HOST_KEY_CHECKING=False \
+                ansible-playbook -i inventory/hosts playbook.yml \
+                -e "ansible_host=$AGENT_IP"
+            '''
+          }
         }
-        success {
-            echo 'Pipeline completed successfully.'
-        }
-        failure {
-            echo 'Pipeline failed.'
-        }
+      }
     }
+  }
+
+  post {
+    always   { cleanWs() }
+    success  { echo 'Pipeline completed successfully.' }
+    failure  { echo 'Pipeline failed.' }
+  }
 }
