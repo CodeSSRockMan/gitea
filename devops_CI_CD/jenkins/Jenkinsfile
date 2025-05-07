@@ -54,7 +54,7 @@ pipeline {
                             def agentID = props.AGENT_INSTANCE_ID
                             echo "Loaded AGENT_ID=${agentID}"
 
-                            def ansibleCmd = "aws ssm send-command " +
+                            def ansibleCmd = def ansibleCmd = "aws ssm send-command " +
                                 "--region '${env.AWS_REGION}' " +
                                 "--instance-ids '${agentID}' " +
                                 "--document-name 'AWS-RunShellScript' " +
@@ -62,11 +62,13 @@ pipeline {
                                 "--parameters commands=[\\"echo 'Starting Ansible inside container'\\",\\"sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'\\"] " +
                                 "--query 'Command.CommandId' --output text"
 
-                            sh """#!/bin/bash
-                                echo "[INFO] Running Ansible playbook inside container..."
-                                COMMAND_ID=\$(${ansibleCmd})
-                                echo "[INFO] Sent SSM command, CommandId=\$COMMAND_ID"
+
+                            sh """
+                            echo "[INFO] Running Ansible playbook inside container..."
+                            COMMAND_ID=\$(${ansibleCmd})
+                            echo "[INFO] Sent SSM command, CommandId=\$COMMAND_ID"
                             """
+
                         }
                     }
                 }
