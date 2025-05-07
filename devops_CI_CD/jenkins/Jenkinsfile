@@ -10,7 +10,7 @@ pipeline {
 
     environment {
         AWS_REGION   = 'us-east-1'
-        SCRIPTS_PATH = 'devops_CI_CD/scripts/ephemeral_agent'
+        SCRIPTS_PATH = 'devops_CI_CD/scripts'
         ANSIBLE_PATH = 'devops_CI_CD/ansible'
     }
 
