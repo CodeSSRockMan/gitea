@@ -46,7 +46,7 @@ pipeline {
                         def props = readProperties file: 'ephem_env.txt'
                         env.AGENT_ID = props.AGENT_INSTANCE_ID
                         env.AGENT_IP = props.AGENT_IP
-                        echo "Loaded AGENT_ID=${env.AGENT_ID}, AGENT_IP=${env.AGENT_IP}"
+                        echo "Loaded AGENT_ID=${env.AGENT_ID}"
                     }
                 }
             }
@@ -55,8 +55,8 @@ pipeline {
         stage('Run Ansible Playbook via SSM') {
             steps {
                 script {
-                    def ansibleCmd = 'sudo docker exec jenkins-agent ansible-playbook -i inventory/hosts playbook.yml -e "ansible_host=localhost"'
-                    def jsonCmd = "[\"${ansibleCmd.replace('"', '\\\"')}\"]"
+                    def ansibleCmd = 'sudo docker exec jenkins-agent bash -c \\\"ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost\\\"'
+                    def jsonCmd = "[\"${ansibleCmd}\"]"
 
                     sh """
                     aws ssm send-command \
