@@ -44,18 +44,21 @@ pipeline {
         }
 
 
-        stage('Load Ephemeral Agent Env') {
-            steps {
-                dir(env.SCRIPTS_PATH) {
-                    script {
-                        // Read key=value pairs into env variables
-                        def props = readProperties file: 'ephem_env.txt'
-                        props.each { k, v -> env[k] = v }
-                        echo "Loaded AGENT_ID=${env.AGENT_ID}, AGENT_IP=${env.AGENT_IP}"
-                    }
+stage('Load Ephemeral Agent Env') {
+    steps {
+        dir(env.SCRIPTS_PATH) {
+            script {
+                def props = readProperties file: 'ephem_env.txt'
+                def envVars = props.collect { k, v -> "${k}=${v}" }
+                withEnv(envVars) {
+                    echo "Loaded AGENT_ID=${props.AGENT_ID}, AGENT_IP=${props.AGENT_IP}"
+                    // Set environment variables for the rest of the pipeline
                 }
             }
         }
+    }
+}
+
 
         stage('Run Ansible Playbook via SSM') {
             steps {
