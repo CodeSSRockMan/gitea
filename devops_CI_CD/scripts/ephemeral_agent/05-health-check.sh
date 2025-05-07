@@ -1,10 +1,18 @@
 #!/bin/bash
 set -e
 
-# 05-health-check.sh — Verify Jenkins agent container is running
-
+# Load environment and previous state
 source env.sh
+
+[[ -f "$STATE_FILE" ]] || { echo "[ERROR] STATE_FILE not found: $STATE_FILE"; exit 1; }
+
 source "$STATE_FILE"
+
+echo "[INFO] Loaded state:"
+grep -v 'PASSWORD' "$STATE_FILE" | while read -r line; do
+  echo "  $line"
+done
+
 
 echo "[INFO] Performing health check on Jenkins agent container..."
 

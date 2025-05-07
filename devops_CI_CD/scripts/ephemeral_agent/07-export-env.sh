@@ -1,11 +1,17 @@
 #!/bin/bash
 set -e
 
-# 07-export-env.sh — Export agent info for downstream steps
-
-# 1) Load config and state
+# Load environment and previous state
 source env.sh
+
+[[ -f "$STATE_FILE" ]] || { echo "[ERROR] STATE_FILE not found: $STATE_FILE"; exit 1; }
+
 source "$STATE_FILE"
+
+echo "[INFO] Loaded state:"
+grep -v 'PASSWORD' "$STATE_FILE" | while read -r line; do
+  echo "  $line"
+done
 
 # 2) Write out the essential variables
 echo "AGENT_ID=$AGENT_INSTANCE_ID" > ephem_env.txt

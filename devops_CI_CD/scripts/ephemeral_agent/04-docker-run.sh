@@ -1,11 +1,19 @@
 #!/bin/bash
+#!/bin/bash
 set -e
 
-# 04-docker-run.sh — Install Docker & launch Jenkins agent container
-
-# Load configuration and previous state
+# Load environment and previous state
 source env.sh
+
+[[ -f "$STATE_FILE" ]] || { echo "[ERROR] STATE_FILE not found: $STATE_FILE"; exit 1; }
+
 source "$STATE_FILE"
+
+echo "[INFO] Loaded state:"
+grep -v 'PASSWORD' "$STATE_FILE" | while read -r line; do
+  echo "  $line"
+done
+
 
 echo "[INFO] Installing Docker and launching Jenkins agent container..."
 

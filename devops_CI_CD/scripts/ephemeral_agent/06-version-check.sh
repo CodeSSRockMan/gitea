@@ -1,11 +1,18 @@
 #!/bin/bash
 set -e
 
-# 06-version-check.sh — Verify tool versions inside the Jenkins agent container
-
-# 1) Load configuration and previous state
+# Load environment and previous state
 source env.sh
+
+[[ -f "$STATE_FILE" ]] || { echo "[ERROR] STATE_FILE not found: $STATE_FILE"; exit 1; }
+
 source "$STATE_FILE"
+
+echo "[INFO] Loaded state:"
+grep -v 'PASSWORD' "$STATE_FILE" | while read -r line; do
+  echo "  $line"
+done
+
 
 echo "[INFO] Checking tool versions inside the container..."
 
