@@ -66,7 +66,6 @@ stage('Load Ephemeral Agent Env') {
                     dir(env.ANSIBLE_PATH) {
                         sh '''
                             echo "Running Ansible against agent at $AGENT_IP..."
-                            source ../.venv/bin/activate
 
                             ANSIBLE_HOST_KEY_CHECKING=False \
                               ansible-playbook -i inventory/hosts playbook.yml \
