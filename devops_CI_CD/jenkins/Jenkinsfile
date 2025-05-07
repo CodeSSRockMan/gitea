@@ -28,7 +28,7 @@ pipeline {
                 ])
             }
         }
-/*
+
         stage('Bootstrap EC2 Agent') {
             steps {
                 withCredentials([
@@ -40,7 +40,7 @@ pipeline {
                 }
             }
         }
-*/
+
         stage('Run Ansible Playbook via SSM') {
             steps {
                 withCredentials([
@@ -93,11 +93,12 @@ pipeline {
         }
         */
     }
-
+/*
     post {
         always {
             cleanWs()
         }
+        */
         success {
             echo 'Pipeline completed successfully.'
         }
