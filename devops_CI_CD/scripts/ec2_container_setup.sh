@@ -159,7 +159,6 @@ for i in {1..10}; do
   echo "[WARN] Container not healthy yet ($i)…"; sleep 3
 done
 
-
 # ---------- TOOL VERSION CHECK ----------
 echo "[INFO] Checking tool versions inside container..."
 COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \

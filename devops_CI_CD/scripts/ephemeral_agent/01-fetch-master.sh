@@ -1,5 +1,7 @@
 source env.sh
 # … ahora REGION y MASTER_TAG ya vienen preexportados …
+echo "[DEBUG] AWS identity:"
+aws sts get-caller-identity --region "$REGION" || { echo "[ERROR] AWS credentials not set"; exit 1; }
 
 echo "[INFO] Fetching Jenkins Master info..."
 INSTANCE_ID=$(aws ec2 describe-instances \
