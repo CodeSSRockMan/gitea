@@ -1,23 +1,25 @@
 # /workspace/gitea/devops_CI_CD/ansible/config/vars.yml
 repository:
   url: "https://github.com/CodeSSRockMan/gitea.git"  # Overridden by bootstrap
-  branch: "main"  # Default, overridden by bootstrap
+  #branch: "main"  # Default, overridden by bootstrap
 
 #ENDPOINTS NEED TO BE UPDATED
-rds_db_host: "your-rds-instance-endpoint"
-rds_db_port: "5432"
-rds_db_user: "your-db-user"
-rds_db_password: "your-db-password"
-rds_db_name: "your-db-name"
+# database:
+#   host: "your-rds-instance-endpoint"
+#   port: "5432"
+#   user: "your-db-user"
+#   password: "your-db-password"
+#   name: "your-db-name"
 
-gitea_repo: "https://github.com/CodeSSRockMan/gitea.git"
-gitea_branch: "develop"
+#gitea_repo: "https://github.com/CodeSSRockMan/gitea.git"
+#gitea_branch: "develop"
 gitea_install_dir: "/opt/gitea"
 gitea_user: "git"
 gitea_port: 3000
 
-# Linters configuration
 
+
+# Linters configuration
 
 terraform:
   linter:

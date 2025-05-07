@@ -2,28 +2,27 @@ pipeline {
     agent any
 
     options {
-        // Print timestamps in the console log
         timestamps()
-        // Skip the default workspace checkout; we'll do a sparse checkout manually
         skipDefaultCheckout(true)
     }
 
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION    = 'us-east-1'
+        SCRIPTS_PATH  = 'devops_CI_CD/scripts/ephemeral_agent'
+        ANSIBLE_PATH  = 'devops_CI_CD/ansible'
     }
 
     stages {
         stage('Sparse Checkout') {
             steps {
-                // Only check out the scripts and ansible folders
                 checkout([
                     $class: 'GitSCM',
                     userRemoteConfigs: scm.userRemoteConfigs,
                     branches: scm.branches,
                     extensions: [
                         [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
-                            [$class: 'SparseCheckoutPath', path: 'devops_CI_CD/scripts'],
-                            [$class: 'SparseCheckoutPath', path: 'ansible']
+                            [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
+                            [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
                         ]]
                     ]
                 ])
@@ -32,11 +31,8 @@ pipeline {
 
         stage('Bootstrap EC2 Agent') {
             steps {
-                dir('devops_CI_CD/scripts') {
-                    // Make all bootstrap scripts executable
+                dir(env.SCRIPTS_PATH) {
                     sh 'chmod +x 0[1-7]-*.sh'
-
-                    // Run each module in order
                     sh './01-fetch-master.sh'
                     sh './02-sg-iam.sh'
                     sh './03-launch-agent.sh'
@@ -48,14 +44,13 @@ pipeline {
             }
         }
 
-        stage('Load Ephemeral Agent Environment') {
+        stage('Load Ephemeral Agent Env') {
             steps {
-                dir('devops_CI_CD/scripts') {
+                dir(env.SCRIPTS_PATH) {
                     script {
-                        // Read key=value pairs from the file into env
                         def props = readProperties file: 'ephem_env.txt'
-                        props.each { key, value -> env[key] = value }
-                        echo "Loaded AGENT_ID=${env.AGENT_ID}, AGENT_IP=${env.AGENT_IP}"
+                        props.each { k,v -> env[k] = v }
+                        echo "Agent IP: ${env.AGENT_IP}"
                     }
                 }
             }
@@ -63,20 +58,14 @@ pipeline {
 
         stage('Run Ansible Playbook via SSM') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
-                ]) {
-                    dir('ansible') {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    dir(env.ANSIBLE_PATH) {
                         sh '''
-                            echo "AWS identity:"
-                            aws sts get-caller-identity
-
-                            echo "Running Ansible playbook against agent at $AGENT_IP"
+                            echo "Running Ansible against ${AGENT_IP}..."
                             source ../.venv/bin/activate
-
                             ANSIBLE_HOST_KEY_CHECKING=False \
-                              ansible-playbook -i inventory/hosts playbook.yml \
-                              -e "ansible_host=$AGENT_IP"
+                              ansible-playbook -i inventory/hosts playbooks/deploy/playbook.yml \
+                              -e "ansible_host=${AGENT_IP}"
                         '''
                     }
                 }
@@ -85,11 +74,7 @@ pipeline {
     }
 
     post {
-        success {
-            echo 'Pipeline completed successfully.'
-        }
-        failure {
-            echo 'Pipeline failed.'
-        }
+        success { echo 'Pipeline completed successfully.' }
+        failure { echo 'Pipeline failed.' }
     }
 }
