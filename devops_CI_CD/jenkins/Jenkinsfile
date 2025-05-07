@@ -69,8 +69,8 @@ pipeline {
 
                         sh """
                         aws ssm send-command \\
-                          --region ${env.AWS_REGION} \\
-                          --instance-ids ${env.AGENT_ID} \\
+                          --region AWS_REGION} \\
+                          --instance-ids AGENT_ID \\
                           --document-name "AWS-RunShellScript" \\
                           --comment "Run Ansible inside container" \\
                           --parameters ${jsonCmd} \\
