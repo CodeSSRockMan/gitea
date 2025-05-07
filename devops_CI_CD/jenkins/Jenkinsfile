@@ -2,9 +2,7 @@ pipeline {
     agent any
 
     options {
-        // Show timestamps in the console log
         timestamps()
-        // Skip the default checkout; we’ll do a sparse checkout
         skipDefaultCheckout(true)
     }
 
@@ -35,43 +33,40 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     dir(env.SCRIPTS_PATH) {
-                        
                         sh 'bash ./ec2_container_setup.sh'
- 
                     }
                 }
             }
         }
 
-
-stage('Load Ephemeral Agent Env') {
-    steps {
-        dir(env.SCRIPTS_PATH) {
-            script {
-                def props = readProperties file: 'ephem_env.txt'
-                def envVars = props.collect { k, v -> "${k}=${v}" }
-                withEnv(envVars) {
-                    echo "Loaded AGENT_ID=${props.AGENT_ID}, AGENT_IP=${props.AGENT_IP}"
-                    // Set environment variables for the rest of the pipeline
+        stage('Load Ephemeral Agent Env') {
+            steps {
+                dir(env.SCRIPTS_PATH) {
+                    script {
+                        def props = readProperties file: 'ephem_env.txt'
+                        env.AGENT_ID = props.AGENT_INSTANCE_ID
+                        env.AGENT_IP = props.AGENT_IP
+                        echo "Loaded AGENT_ID=${env.AGENT_ID}, AGENT_IP=${env.AGENT_IP}"
+                    }
                 }
             }
         }
-    }
-}
-
 
         stage('Run Ansible Playbook via SSM') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    dir(env.ANSIBLE_PATH) {
-                        sh '''
-                            echo "Running Ansible against agent at $AGENT_IP..."
+                script {
+                    def ansibleCmd = 'sudo docker exec jenkins-agent ansible-playbook -i inventory/hosts playbook.yml -e "ansible_host=localhost"'
+                    def jsonCmd = "[\"${ansibleCmd.replace('"', '\\\"')}\"]"
 
-                            ANSIBLE_HOST_KEY_CHECKING=False \
-                              ansible-playbook -i inventory/hosts playbook.yml \
-                              -e "ansible_host=$AGENT_IP"
-                        '''
-                    }
+                    sh """
+                    aws ssm send-command \
+                      --region ${env.AWS_REGION} \
+                      --instance-ids ${env.AGENT_ID} \
+                      --document-name "AWS-RunShellScript" \
+                      --comment "Run Ansible inside container" \
+                      --parameters commands=${jsonCmd} \
+                      --query "Command.CommandId" --output text
+                    """
                 }
             }
         }
@@ -79,7 +74,6 @@ stage('Load Ephemeral Agent Env') {
 
     post {
         always {
-            // Clean up the workspace regardless of result
             cleanWs()
         }
         success {
