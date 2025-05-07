@@ -35,14 +35,9 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     dir(env.SCRIPTS_PATH) {
-                        sh 'chmod +x 0[1-7]-*.sh'
-                        sh 'bash ./01-fetch-master.sh'
-                        sh 'bash ./02-sg-iam.sh'
-                        sh 'bash ./03-launch-agent.sh'
-                        sh 'bash ./04-docker-run.sh'
-                        sh 'bash ./05-health-check.sh'
-                        sh 'bash ./06-version-check.sh'
-                        sh 'bash ./07-export-env.sh'
+                        
+                        sh 'bash ./ec2_container_setup.sh'
+ 
                     }
                 }
             }
