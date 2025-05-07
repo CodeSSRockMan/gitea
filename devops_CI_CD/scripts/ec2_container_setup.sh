@@ -140,12 +140,17 @@ COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INST
 
 
 
-echo "[INFO] Waiting for container to launch…"
+echo "[INFO] Waiting for container to launch..."
 for i in {1..20}; do
-  STATUS=$(aws ssm list-command-invocations …)
+  STATUS=$(aws ssm list-command-invocations --region "$REGION" \
+    --command-id "$COMMAND_ID" --details \
+    --query "CommandInvocations[0].Status" --output text)
+
   [[ "$STATUS" == "Success" ]] && { echo "[SUCCESS] Container launched."; break; }
-  echo "[INFO] Status: $STATUS (attempt $i)…"; sleep 5
+  echo "[INFO] Status: $STATUS (attempt $i)..." 
+  sleep 5
 done
+
 
 # ---------- HEALTH-CHECK THE DOCKER CONTAINER ----------
 echo "[INFO] Verifying container is running]"
