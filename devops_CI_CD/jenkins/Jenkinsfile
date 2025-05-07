@@ -1,27 +1,78 @@
 pipeline {
   agent any
 
+  options {
+    timestamps()
+    // Evita el checkout por defecto de Jenkins; haremos uno manual con sparse-checkout
+    skipDefaultCheckout(true)
+  }
+
+  environment {
+    AWS_REGION = 'us-east-1'
+  }
+
   stages {
-    stage('Create ephemeral EC2') {
+    stage('Sparse Checkout') {
       steps {
-        sh 'bash devops_CI_CD/scripts/create_ephemeral_ec2.sh'
-        script {
-          def envVars = readFile('ephemeral_instance_env.txt').split('\n')
-          envVars.each {
-            def (key, value) = it.tokenize('=')
-            env[key] = value
-          }
+        // Checkout solamente las carpetas que necesitamos
+        checkout([
+          $class: 'GitSCM',
+          // Reutiliza la misma configuración de ramas y repositorio que definiste en el multibranch/job
+          userRemoteConfigs: scm.userRemoteConfigs,
+          branches: scm.branches,
+          extensions: [
+            // Plugin Git: sparse checkout
+            [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
+              // Ruta a tu script de creación de EC2
+              [$class: 'SparseCheckoutPath', path: 'devops_CI_CD/scripts'],
+              // Ruta al directorio Ansible
+              [$class: 'SparseCheckoutPath', path: 'ansible']
+            ]]
+          ]
+        ])
+      }
+    }
+
+    stage('Run preparation script') {
+      steps {
+        dir('devops_CI_CD/scripts') {
+          // Aquí tu script que crea la EC2 y exporta ephemeral_instance_env.txt
+          sh 'bash create_ephemeral_ec2.sh'
         }
       }
     }
 
-    stage('Install and Run Agent') {
+    stage('Run Ansible Playbook via SSM') {
       steps {
-        sh '''
-          echo "Running agent in instance $INSTANCE_ID"
-          bash devops_CI_CD/scripts/init_docker_agent.sh "$INSTANCE_ID" "$SG_ID"
-        '''
+        // Solo necesitas las credenciales AWS para SSM / llamadas AWS CLI
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+        ]) {
+          dir('ansible') {
+            sh '''
+              echo "Checking AWS identity..."
+              aws sts get-caller-identity
+
+              echo "Running Ansible playbook (via SSM)..."
+              # Si usas un virtualenv
+              source ../.venv/bin/activate
+
+              # Asume que tu inventory está configurado para usar aws_ssm (community.aws.aws_ssm)
+              ANSIBLE_HOST_KEY_CHECKING=False \
+                ansible-playbook -i inventory/hosts playbook.yml
+            '''
+          }
+        }
       }
+    }
+  }
+
+  post {
+    success {
+      echo "[SUCCESS] Deployment via Ansible completed."
+    }
+    failure {
+      echo "[FAILURE] Something went wrong in the pipeline."
     }
   }
 }

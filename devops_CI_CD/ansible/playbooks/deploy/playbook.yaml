@@ -1,0 +1,167 @@
+---
+- name: Full Gitea Deployment
+  hosts: all
+  become: true
+  vars_files:
+    - /tmp/bootstrap_vars.yml
+    - "{{ playbook_dir }}/../../config/vars.yml"
+
+  tasks:
+    
+    # 1. Install OS packages (git, make, Go, Node, MySQL)  #
+    
+    - name: Install essential packages
+      apt:
+        name:
+          - git
+          - make
+          - build-essential
+          - wget
+          - tar
+          - mysql-client
+          - python3-pymysql
+        update_cache: yes
+
+    
+    # 2. Download and install Go {{ go_version }} #
+    
+    - name: Download Go {{ go_version }} archive
+      get_url:
+        url: "https://golang.org/dl/go{{ go_version }}.linux-amd64.tar.gz"
+        dest: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+
+    - name: Remove any existing Go installation
+      file:
+        path: /usr/local/go
+        state: absent
+
+    - name: Extract Go to /usr/local
+      unarchive:
+        src: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+        dest: /usr/local
+        remote_src: yes
+
+    
+    # 3. Configure GOPATH and update PATH globally   
+    
+    - name: Ensure GOPATH directory exists
+      file:
+        path: "{{ ansible_env.HOME }}/go"
+        state: directory
+        mode: '0755'
+
+    - name: Persist Go environment
+      copy:
+        dest: /etc/profile.d/go_env.sh
+        content: |
+          export GOPATH={{ ansible_env.HOME }}/go
+          export PATH=/usr/local/go/bin:${GOPATH}/bin:$PATH
+        mode: '0644'
+
+    
+    # 4. Install Node.js {{ node_version }} via APT 
+    
+    - name: Add NodeSource GPG key
+      apt_key:
+        url: "{{ node_setup_url }}/pubkey.gpg"
+
+    - name: Add NodeSource repository
+      apt_repository:
+        repo: "deb {{ node_setup_url }} {{ ansible_distribution|lower }} {{ ansible_distribution_release }} main"
+        state: present
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        update_cache: yes
+
+    - name: Fix node binary path
+      file:
+        src: "{{ nodejs_path }}"
+        dest: "{{ node_path }}"
+        state: link
+        force: yes
+
+    
+    # 5. Database setup: create Gitea DB and user     
+    
+    - name: Create Gitea database
+      mysql_db:
+        name: "{{ database.name }}"
+        state: present
+        login_host: "{{ database.host }}"
+        login_port: "{{ database.port }}"
+        login_user: "{{ database.admin_user }}"
+        login_password: "{{ database.admin_password }}"
+
+    - name: Create Gitea DB user
+      mysql_user:
+        name: "{{ database.user }}"
+        password: "{{ database.password }}"
+        priv: "{{ database.name }}.*:ALL"
+        host: "%"
+        state: present
+        login_host: "{{ database.host }}"
+        login_port: "{{ database.port }}"
+        login_user: "{{ database.admin_user }}"
+        login_password: "{{ database.admin_password }}"
+
+    
+    # 6. Deploy Gitea configuration (app.ini from template)   #
+    
+    - name: Ensure custom/conf directory exists
+      file:
+        path: "{{ gitea_install_dir }}/custom/conf"
+        state: directory
+        mode: '0755'
+
+    - name: Deploy app.ini
+      template:
+        src: "{{ playbook_dir }}/../../templates/app.ini.j2"
+        dest: "{{ gitea_install_dir }}/custom/conf/app.ini"
+        mode: '0644'
+      vars:
+        db_type: mysql
+        db_host: "{{ database.host }}:{{ database.port }}"
+        db_name: "{{ database.name }}"
+        db_user: "{{ database.user }}"
+        db_passwd: "{{ database.password }}"
+        db_ssl_mode: "{{ database.tls.ssl_mode | default('disable') }}"
+
+    
+    # 7. Clone Gitea repo (depth={{ git_clone_depth }}) #
+    
+    - name: Clone Gitea
+      git:
+        repo: "{{ gitea_repo }}"
+        dest: "{{ gitea_install_dir }}"
+        version: "{{ gitea_branch }}"
+        depth: "{{ git_clone_depth }}"
+
+    
+    # 8. Compile Gitea with build tags     #
+    
+    - name: Compile Gitea
+      shell: |
+        cd {{ gitea_install_dir }}
+        TAGS="{{ gitea_build_tags }}" make build
+      args:
+        executable: /bin/bash
+        creates: "{{ gitea_install_dir }}/gitea"
+
+    
+    # 9. Deploy systemd service unit and restart Gitea       #
+    
+    - name: Deploy systemd unit
+      template:
+        src: "{{ playbook_dir }}/../../templates/gitea.service.j2"
+        dest: "/etc/systemd/system/gitea.service"
+        mode: '0644'
+      notify: Restart Gitea
+
+  handlers:
+    - name: Restart Gitea
+      systemd:
+        name: gitea
+        state: restarted
+        enabled: yes

@@ -16,6 +16,9 @@ gitea_install_dir: "/opt/gitea"
 gitea_user: "git"
 gitea_port: 3000
 
+# Linters configuration
+
+
 terraform:
   linter:
     container: "ghcr.io/terraform-linters/tflint:latest"
@@ -51,9 +54,14 @@ jenkins:
         - "missing_agent_declaration"
         - "deprecated_step"
 
+
+# Logging settings
+
 logging:
   dir: "/workspace/gitea/devops_CI_CD/logs"
   retention_days: 7
+
+# Path shortcuts
 
 paths:
   terraform: "/terraform"

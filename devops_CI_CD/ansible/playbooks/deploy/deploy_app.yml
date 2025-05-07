@@ -7,8 +7,60 @@
     - "/tmp/bootstrap_vars.yml"  # Jenkins variables
     - "{{ playbook_dir }}/../../config/vars.yml"  # Relative path to repo variables
 
+######################################################  
+# 1. Install MySQL client  
+# 2. Database setup: create Gitea database and user  
+# 3. Deploy Gitea configuration (app.ini)  
+#######################################################
+
   tasks:
-    # 1. Install only git, make, golang, npm
+   
+    - name: Install MySQL client
+      apt:
+        name: mysql-client
+        state: present
+        update_cache: yes
+
+
+    - name: Create Gitea database
+      mysql_db:
+        name: "{{ database.name }}"
+        state: present
+        login_host: "{{ database.host }}"
+        login_port: "{{ database.port }}"
+        login_user: "{{ database.admin_user }}"
+        login_password: "{{ database.admin_password }}"
+
+    - name: Create Gitea DB user
+      mysql_user:
+        name: "{{ database.user }}"
+        password: "{{ database.password }}"
+        priv: "{{ database.name }}.*:ALL"
+        host: "%"
+        state: present
+        login_host: "{{ database.host }}"
+        login_port: "{{ database.port }}"
+        login_user: "{{ database.admin_user }}"
+        login_password: "{{ database.admin_password }}"
+
+
+    - name: Deploy Gitea configuration (app.ini)
+      template:
+        src: "{{ playbook_dir }}/../../templates/app.ini.j2"
+        dest: "{{ gitea_install_dir }}/custom/conf/app.ini"
+        mode: '0644'
+      vars:
+        db_type: mysql
+        db_host: "{{ database.host }}:{{ database.port }}"
+        db_name: "{{ database.name }}"
+        db_user: "{{ database.user }}"
+        db_passwd: "{{ database.password }}"
+        db_ssl_mode: "{{ database.tls.ssl_mode | default('disable') }}"
+  
+ ##############################################################################
+
+ 
+  # 1. Install only git, make, golang, npm
     - name: Install core tools
       apt:
         name:

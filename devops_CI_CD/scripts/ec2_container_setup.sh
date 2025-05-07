@@ -81,20 +81,32 @@ PROFILE_ARN=$(aws iam get-instance-profile --instance-profile-name "$AGENT_PROFI
   --query "InstanceProfile.Arn" --output text)
 
 # ---------- LAUNCH INSTANCE ----------
-echo "[INFO] Launching ephemeral EC2 instance..."
-AGENT_INSTANCE_ID=$(aws ec2 run-instances --region "$REGION" \
-  --image-id "$AMI_ID" --instance-type "t3.micro" \
-  --iam-instance-profile Arn="$PROFILE_ARN" \
-  --security-group-ids "$AGENT_SG_ID" --subnet-id "$SUBNET_ID" \
-  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$AGENT_TAG}]" \
-  --query 'Instances[0].InstanceId' --output text)
+# ---------- LAUNCH OR REUSE INSTANCE ----------
+echo "[INFO] Checking for existing ephemeral agent instance..."
+EXISTING_AGENT=$(aws ec2 describe-instances --region "$REGION" \
+  --filters "Name=tag:Name,Values=$AGENT_TAG" "Name=instance-state-name,Values=running" \
+  --query "Reservations[0].Instances[0].InstanceId" --output text 2>/dev/null)
 
-echo "[INFO] Waiting for EC2 instance to reach 'running' state..."
-for i in {1..30}; do
-  STATE=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
-    --query "Reservations[0].Instances[0].State.Name" --output text)
-  [[ "$STATE" == "running" ]] && { echo "[INFO] Instance is running."; break; } || sleep 5
-done
+if [[ "$EXISTING_AGENT" != "None" && -n "$EXISTING_AGENT" ]]; then
+  echo "[INFO] Reusing existing ephemeral agent instance: $EXISTING_AGENT"
+  AGENT_INSTANCE_ID="$EXISTING_AGENT"
+else
+  echo "[INFO] Launching new ephemeral EC2 instance..."
+  AGENT_INSTANCE_ID=$(aws ec2 run-instances --region "$REGION" \
+    --image-id "$AMI_ID" --instance-type "t3.micro" \
+    --iam-instance-profile Arn="$PROFILE_ARN" \
+    --security-group-ids "$AGENT_SG_ID" --subnet-id "$SUBNET_ID" \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$AGENT_TAG}]" \
+    --query 'Instances[0].InstanceId' --output text)
+
+  echo "[INFO] Waiting for EC2 instance to reach 'running' state..."
+  for i in {1..30}; do
+    STATE=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
+      --query "Reservations[0].Instances[0].State.Name" --output text)
+    [[ "$STATE" == "running" ]] && { echo "[INFO] Instance is running."; break; } || sleep 5
+  done
+fi
+
 
 # ---------- INSTALL DOCKER AND START CONTAINER ----------
 echo "[INFO] Installing Docker and launching Jenkins agent container..."

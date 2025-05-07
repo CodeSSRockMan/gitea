@@ -1,0 +1,2 @@
+[jenkins_agent]
+jenkins-agent ansible_connection=docker ansible_host=unix:///var/run/docker.sock
