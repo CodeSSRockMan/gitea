@@ -55,7 +55,7 @@ pipeline {
         stage('Run Ansible Playbook via SSM') {
             steps {
                 script {
-                    def ansibleCmd = 'sudo docker exec jenkins-agent bash -c \\\"ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost\\\"'
+                    def ansibleCmd = 'sudo docker exec jenkins-agent bash -c \\\"ansible-playbook -i inventory/hosts playbook.yml -e \\\"ansible_host=localhost\\\"\\\"'
                     def jsonCmd = "[\"${ansibleCmd}\"]"
 
                     sh """
@@ -70,7 +70,7 @@ pipeline {
                 }
             }
         }
-    }
+      }
 
     post {
         always {
