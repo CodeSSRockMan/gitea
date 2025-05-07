@@ -47,9 +47,7 @@ pipeline {
                 dir(env.SCRIPTS_PATH) {
                     script {
                         def props = readProperties file: 'ephem_env.txt'
-                        withEnv([
-                            "AGENT_ID=${props.AGENT_ID}"
-                        ]) {
+                        withEnv(["AGENT_ID=${props.AGENT_ID}"]) {
                             echo "Loaded AGENT_ID=${env.AGENT_ID}"
                         }
                     }
@@ -65,16 +63,16 @@ pipeline {
                 ]]) {
                     script {
                         def ansibleCmd = 'sudo docker exec jenkins-agent bash -lc "ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost"'
-                        def jsonCmd    = "'commands=[\"${ansibleCmd.replace('\"','\\\"')}\"]'"
+                        def jsonCmd    = "[\"${ansibleCmd.replace('\"','\\\"')}\"]"
 
                         sh """
-                        aws ssm send-command \\
-                          --region AWS_REGION} \\
-                          --instance-ids AGENT_ID \\
-                          --document-name "AWS-RunShellScript" \\
-                          --comment "Run Ansible inside container" \\
-                          --parameters ${jsonCmd} \\
-                          --query "Command.CommandId" --output text
+                            aws ssm send-command \\
+                              --region ${env.AWS_REGION} \\
+                              --instance-ids ${env.AGENT_ID} \\
+                              --document-name AWS-RunShellScript \\
+                              --comment Run Ansible inside container \\
+                              --parameters commands=${jsonCmd} \\
+                              --query Command.CommandId --output text
                         """
                     }
                 }
