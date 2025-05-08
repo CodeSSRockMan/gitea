@@ -1,14 +1,46 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+        skipDefaultCheckout(true)
+    }
+
     environment {
-        AWS_REGION     = 'us-east-1'
-        INSTANCE_ID    = 'i-0123456789abcdef0' // Reemplaza con tu ID real
-        CONTAINER_NAME = 'jenkins-agent'
-        SCRIPTS_PATH   = 'devops_CI_CD/scripts'
+        AWS_REGION   = 'us-east-1'
+        SCRIPTS_PATH = 'devops_CI_CD/scripts'
+        ANSIBLE_PATH = 'devops_CI_CD/ansible'
     }
 
     stages {
+        stage('Sparse Checkout') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    userRemoteConfigs: scm.userRemoteConfigs,
+                    branches: scm.branches,
+                    extensions: [
+                        [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
+                            [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
+                            [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
+                        ]]
+                    ]
+                ])
+            }
+        }
+
+        stage('Bootstrap EC2 Agent') {
+            steps {
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir(env.SCRIPTS_PATH) {
+                        sh 'bash ./ec2_container_setup.sh'
+                    }
+                }
+            }
+        }
+
         stage('Run Ansible Playbook via SSM') {
             steps {
                 withCredentials([
@@ -18,41 +50,49 @@ pipeline {
                         sh '''
                             echo "[INFO] Reading ephemeral instance ID..."
                             AGENT_INSTANCE_ID=$(grep AGENT_INSTANCE_ID ephem_env.txt | cut -d "=" -f2)
+                            echo "Loaded AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID"
 
-                            if [ -z "$AGENT_INSTANCE_ID" ]; then
-                                echo "[ERROR] AGENT_INSTANCE_ID not found in ephem_env.txt"
-                                exit 1
-                            fi
-
-                            echo "[INFO] Loaded AGENT_INSTANCE_ID=$AGENT_INSTANCE_ID"
-
-                            echo "[INFO] Creating SSM commands JSON..."
-                            cat > commands.json <<EOF
-{
-  "commands": [
-    "echo Starting Ansible playbook...",
-    "sudo docker exec jenkins-agent bash -lc 'ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'"
-  ]
-}
-EOF
-
-                            echo "[INFO] Sending SSM command..."
+                            echo "[INFO] Running Ansible playbook inside container..."
                             COMMAND_ID=$(aws ssm send-command \
-                              --region "$AWS_REGION" \
-                              --instance-ids "$AGENT_INSTANCE_ID" \
-                              --document-name "AWS-RunShellScript" \
-                              --comment "Run Ansible Playbook" \
-                              --parameters file://commands.json \
-                              --query "Command.CommandId" \
-                              --output text)
+                                --region "$AWS_REGION" \
+                                --instance-ids "$AGENT_INSTANCE_ID" \
+                                --document-name "AWS-RunShellScript" \
+                                --comment "Run Ansible playbook in container" \
+                                --parameters commands='["echo Starting Ansible inside container","sudo docker exec jenkins-agent bash -lc '\''ansible-playbook -i inventory/hosts playbook.yml -e ansible_host=localhost'\''"]' \
+                                --query "Command.CommandId" \
+                                --output text)
 
-                            echo "[INFO] Command ID: $COMMAND_ID"
+                            echo "[INFO] Sent SSM command, CommandId=$COMMAND_ID"
                             echo "$COMMAND_ID" > command_id.txt
                         '''
                     }
                 }
             }
+}
+
+
+        stage('Wait for Ansible Playbook Completion') {
+            steps {
+                dir(env.SCRIPTS_PATH) {
+                    sh '''
+                        COMMAND_ID=$(cat command_id.txt)
+                        echo "[INFO] Waiting for command $COMMAND_ID to complete..."
+                        STATUS=$(aws ssm list-commands --command-id "$COMMAND_ID" --query "Commands[0].Status" --output text)
+                        echo "Ansible playbook command status: $STATUS"
+                    '''
+                }
+            }
         }
+
+        /*
+        stage('Cleanup') {
+            steps {
+                dir(env.SCRIPTS_PATH) {
+                    sh 'bash ./cleanup.sh'
+                }
+            }
+        }
+        */
     }
 
     post {

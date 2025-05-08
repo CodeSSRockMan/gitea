@@ -1,0 +1,4 @@
+# inventory/host
+[ssm_ec2]
+gitea-web ansible_connection=community.aws.aws_ssm ansible_region=us-east-1
+

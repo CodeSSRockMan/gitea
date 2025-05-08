@@ -103,3 +103,12 @@ resource "aws_security_group_rule" "egress_all" {
 #     Name = "jenkins-sg"
 #   }
 # }
+resource "aws_security_group_rule" "gitea_http_ingress" {
+  type              = "ingress"
+  from_port         = 3000
+  to_port           = 3000
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]       # o, más seguro, tu IP /32
+  security_group_id = aws_security_group.ec2_sg.id
+  description       = "Allow Gitea UI on port 3000"
+}

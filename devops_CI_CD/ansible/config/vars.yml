@@ -1,70 +1,88 @@
-# /workspace/gitea/devops_CI_CD/ansible/config/vars.yml
-repository:
-  url: "https://github.com/CodeSSRockMan/gitea.git"  # Overridden by bootstrap
-  #branch: "main"  # Default, overridden by bootstrap
+# Gitea main configuration
+gitea:
+  repo: "https://github.com/go-gitea/gitea.git"
+  install_dir: "/opt/gitea"
+  version: "release/v1.23"
+  build_tags: "bindata sqlite sqlite_unlock_notify"
+  user: "git"
+  port: 3000
 
-#ENDPOINTS NEED TO BE UPDATED
-# database:
-#   host: "your-rds-instance-endpoint"
-#   port: "5432"
-#   user: "your-db-user"
-#   password: "your-db-password"
-#   name: "your-db-name"
+# Git clone depth (0 = full history)
+git_clone_depth: 0
 
-#gitea_repo: "https://github.com/CodeSSRockMan/gitea.git"
-#gitea_branch: "develop"
-gitea_install_dir: "/opt/gitea"
-gitea_user: "git"
-gitea_port: 3000
+# Go installation version
+go_version: "1.23.0"
 
+# Node.js installation
+node_setup_url: "https://deb.nodesource.com/setup_18.x"
+nodejs_path: "/usr/bin/nodejs"
+node_path: "/usr/bin/node"
 
+# MySQL Database configuration
+database:
+  port: 3306
+  admin_user: root
+  admin_password: "{{ rds_password }}"  
+  # Esto debe resolverse con fetch de SSM
+  # Estos valores se deben completar dinámicamente con `set_fact` desde SSM
+  # host:
+  # user:
+  # password:
+  # name:
+  # tls:
+  #   ssl_mode: disable
 
-# Linters configuration
-
-terraform:
-  linter:
-    container: "ghcr.io/terraform-linters/tflint:latest"
-    args: "--config /code/.tflint.hcl --no-color"
-    config:  # Example additional rules
-      enabled_rules:
-        - "aws_resource_missing_tags"
-        - "terraform_unused_declarations"
-
-ansible:
-  linter:
-    container: "ansible/ansible-lint:latest"
-    args: "--parseable-severity -x role-name"
-    skip_list:  # Example exclusions
-      - "204"  # Lines should be no longer than 120 chars
-      - "305"  # Use shell only when shell functionality is required
-
-docker:
-  linter:
-    container: "hadolint/hadolint:latest"
-    args: "--format json"
-    rules:  # Example rule overrides
-      disable:
-        - "DL3008"  # Pin versions in apt-get install
-        - "DL3015"  # Avoid additional packages
-
-jenkins:
-  linter:
-    container: "jenkins/jenkins:lts-jdk11"
-    rules:
-      strict_mode: true
-      ignored_warnings:
-        - "missing_agent_declaration"
-        - "deprecated_step"
+# Build tags as flat variable (para compatibilidad)
+gitea_build_tags: "bindata sqlite sqlite_unlock_notify"
 
 
-# Logging settings
 
-logging:
-  dir: "/workspace/gitea/devops_CI_CD/logs"
-  retention_days: 7
+# # Linters configuration
 
-# Path shortcuts
+# terraform:
+#   linter:
+#     container: "ghcr.io/terraform-linters/tflint:latest"
+#     args: "--config /code/.tflint.hcl --no-color"
+#     config:  # Example additional rules
+#       enabled_rules:
+#         - "aws_resource_missing_tags"
+#         - "terraform_unused_declarations"
 
-paths:
-  terraform: "/terraform"
-  ansible: "/ansible"
+# ansible:
+#   linter:
+#     container: "ansible/ansible-lint:latest"
+#     args: "--parseable-severity -x role-name"
+#     skip_list:  # Example exclusions
+#       - "204"  # Lines should be no longer than 120 chars
+#       - "305"  # Use shell only when shell functionality is required
+
+# docker:
+#   linter:
+#     container: "hadolint/hadolint:latest"
+#     args: "--format json"
+#     rules:  # Example rule overrides
+#       disable:
+#         - "DL3008"  # Pin versions in apt-get install
+#         - "DL3015"  # Avoid additional packages
+
+# jenkins:
+#   linter:
+#     container: "jenkins/jenkins:lts-jdk11"
+#     rules:
+#       strict_mode: true
+#       ignored_warnings:
+#         - "missing_agent_declaration"
+#         - "deprecated_step"
+
+
+# # Logging settings
+
+# logging:
+#   dir: "/workspace/gitea/devops_CI_CD/logs"
+#   retention_days: 7
+
+# # Path shortcuts
+
+# paths:
+#   terraform: "/terraform"
+#   ansible: "/ansible"

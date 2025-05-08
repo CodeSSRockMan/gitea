@@ -1,0 +1,38 @@
+# 9. Build Gitea asynchronously and show full log on completion
+- name: Compile Gitea asynchronously
+  shell: |
+    export PATH=/usr/local/go/bin:$PATH
+    cd {{ gitea.install_dir }}
+    echo "[INFO] Starting build at $(date)" > /tmp/gitea_build.log
+    echo "[INFO] Tags: {{ gitea_build_tags }}" >> /tmp/gitea_build.log
+    TAGS="{{ gitea_build_tags }}" make -j1 build >> /tmp/gitea_build.log 2>&1
+  args:
+    executable: /bin/bash
+  async: 3600
+  poll: 0
+  register: async_build_result
+
+
+- name: Wait for Gitea build to finish
+  async_status:
+    jid: "{{ async_build_result.ansible_job_id }}"
+  register: gitea_build_result
+  until: gitea_build_result.finished
+  retries: 60
+  delay: 30
+  failed_when: false
+
+- name: Show full Gitea build log (last 200 lines)
+  shell: tail -n 200 /tmp/gitea_build.log || true
+  register: build_full_log
+  ignore_errors: true
+
+- name: Print Gitea build log summary
+  debug:
+    msg: "{{ build_full_log.stdout_lines }}"
+  when: build_full_log.stdout_lines is defined
+
+- name: Check Gitea binary exists
+  stat:
+    path: "{{ gitea.install_dir }}/gitea"
+  register: gitea_binary

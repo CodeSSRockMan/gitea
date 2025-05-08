@@ -1,17 +1,23 @@
-- name: Deploy Gitea on ephemeral agent
-  hosts: all
-  become: true
 # playbooks/deploy/playbook.yaml
-- name: Full Gitea Deployment
+- name: Full Gitea Deployment on ephemeral agent via SSM
   hosts: all
   become: true
+
+  vars:
+    ansible_connection: community.aws.aws_ssm
+    ansible_aws_ssm_bucket_name: "bucket-gitea"
+    ansible_aws_ssm_region: "us-east-1"
+    aws_region: "us-east-1"
+    
+
   vars_files:
     - /tmp/bootstrap_vars.yml
     - "{{ playbook_dir }}/../../config/vars.yml"
 
   tasks:
-    - import_tasks: "{{ playbook_dir }}/../../tasks/fetch_ssm_db.yml"
-    - import_tasks: "{{ playbook_dir }}/../../tasks/deploy_gitea.yml"
+    - import_tasks: "{{ playbook_dir }}/../../tasks/test_ssm.yaml"
+    - import_tasks: "{{ playbook_dir }}/../../tasks/fetch_smm_db.yaml"
+    - import_tasks: "{{ playbook_dir }}/../../tasks/setup_and_deploy_gitea.yaml"
 
   handlers:
     - name: Restart Gitea

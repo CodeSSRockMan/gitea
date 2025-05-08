@@ -1,0 +1,8 @@
+plugin: community.aws.aws_ssm
+regions:
+  - us-east-1
+hostnames:
+  - name
+keyed_groups:
+  - key: tags.Name
+    prefix: tag

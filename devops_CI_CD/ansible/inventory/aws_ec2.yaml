@@ -1,0 +1,14 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-east-1
+
+filters:
+  instance-id: i-01d6d8496ec5d4a8a  
+
+hostnames:
+  - instance-id
+compose:
+  ansible_connection: community.aws.aws_ssm
+  ansible_python_interpreter: /usr/bin/python3
+  ansible_aws_ssm_region: us-east-1
+  ansible_aws_ssm_bucket_name: "bucket-gitea"

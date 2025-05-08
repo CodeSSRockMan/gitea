@@ -1,36 +1,87 @@
----
-- name: Fetch RDS DB config from SSM
-  vars:
-    param_names:
-      host:       "/rds/mysql/host"
-      user:       "/rds/mysql/username"
-      password:   "/rds/mysql/password"
-      db_name:    "/rds/mysql/db_name"
-      db_url:     "/rds/mysql/db_url"
+# tasks/fetch_ssm_db.yaml
+- name: Install AWS CLI
+  apt:
+    name: awscli
+    state: present
+    update_cache: true
 
-  block:
-    - name: Fetch all RDS parameters
-      set_fact:
-        rds_params: >-
-          {{
-            dict(param_names.keys() |
-              zip(param_names.values() |
-                map('extract',
-                    lookup('community.aws.aws_ssm',
-                           param_names.values(),
-                           decrypt=true,
-                           region=aws_region
-                    )
-                )
-              )
-            )
-          }}
 
-    - name: Set DB variables as facts
-      set_fact:
-        database:
-          host:       "{{ rds_params.host }}"
-          user:       "{{ rds_params.user }}"
-          password:   "{{ rds_params.password }}"
-          name:       "{{ rds_params.db_name }}"
-          db_url:     "{{ rds_params.db_url }}"
+- name: Fetch DATABASE_URL from SSM
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/db_url" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: db_url_result
+  changed_when: false
+
+- name: Set fact - DATABASE_URL
+  set_fact:
+    DATABASE_URL: "{{ db_url_result.stdout }}"
+
+- name: Fetch RDS Host from SSM
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/host" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: rds_host_result
+  changed_when: false
+
+- name: Set fact - RDS Host
+  set_fact:
+    rds_host: "{{ rds_host_result.stdout }}"
+
+- name: Fetch RDS Admin. Username from SSM
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/username" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: rds_user_result
+  changed_when: false
+
+- name: Set fact - RDS Username
+  set_fact:
+    rds_user: "{{ rds_user_result.stdout }}"
+
+- name: Fetch RDS Admin. Password from SSM
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/password" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: rds_password_result
+  changed_when: false
+
+- name: Set fact - RDS Password
+  set_fact:
+    rds_password: "{{ rds_password_result.stdout }}"
+
+# Fetch RDS gitea username $ password from SSM
+
+- name: Fetch RDS gitea Password from SSM
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/gitea_password" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: gitea_rds_password_result
+  changed_when: false
+
+- name: Set fact - gitea RDS Password
+  set_fact:
+    gitea_rds_password: "{{ gitea_rds_password_result.stdout }}"
+
+
+- name: Fetch RDS gitea Username from SSM
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/gitea_user" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: gitea_rds_user_result
+  changed_when: false
+
+- name: Set fact - gitea RDS Username
+  set_fact:
+    gitea_rds_user: "{{ gitea_rds_user_result.stdout }}"
+
+
+
+
+
+
+- name: Assemble RDS parameters into `database` dictionary
+  set_fact:
+    database:
+      host: "{{ rds_host.split(':')[0] }}"
+      user: "{{ gitea_rds_user }}"
+      password: "{{ gitea_rds_password }}"
+      name: "{{ db_url_result.stdout.split('/')[-1].split('?')[0] | default('gitea') }}"
+      port: 3306
+      admin_user: "{{ rds_user }}"
+      admin_password: "{{ rds_password }}"
+

@@ -1,0 +1,117 @@
+# 1. Install essential OS packages
+- name: Install essential packages
+  apt:
+    name:
+      - git
+      - make
+      - build-essential
+      - wget
+      - tar
+      - mysql-client
+      - python3-pymysql
+    update_cache: yes
+
+# 2. Check current Go version
+- name: Check current Go version
+  shell: |
+    if command -v go >/dev/null; then
+      go version | awk '{print $3}' | sed 's/go//'
+    else
+      echo "0"
+    fi
+  register: current_go_version
+  changed_when: false
+
+- name: Set flag if current Go is older than required
+  set_fact:
+    go_needs_upgrade: true
+  when: current_go_version.stdout is version(go_version, '<')
+
+# 3. Install or upgrade Go
+- name: Remove existing Go installation
+  file:
+    path: /usr/local/go
+    state: absent
+  when: go_needs_upgrade | default(false)
+
+- name: Download Go {{ go_version }} archive
+  get_url:
+    url: "https://go.dev/dl/go{{ go_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+  when: go_needs_upgrade | default(false)
+
+- name: Extract Go to /usr/local
+  unarchive:
+    src: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+    dest: /usr/local
+    remote_src: yes
+  when: go_needs_upgrade | default(false)
+
+- name: Add Go to system PATH
+  copy:
+    dest: /etc/profile.d/go.sh
+    content: |
+      export PATH=$PATH:/usr/local/go/bin
+    mode: '0755'
+  when: go_needs_upgrade | default(false)
+
+- name: Verify installed Go version
+  shell: /usr/local/go/bin/go version
+  register: go_version_final
+  changed_when: false
+
+- name: Show Go version
+  debug:
+    msg: "Go version is now: {{ go_version_final.stdout }}"
+
+# 4. Configure GOPATH
+- name: Ensure GOPATH directory exists
+  file:
+    path: "{{ ansible_env.HOME }}/go"
+    state: directory
+    mode: '0755'
+
+- name: Persist Go environment
+  copy:
+    dest: /etc/profile.d/go_env.sh
+    content: |
+      export GOPATH={{ ansible_env.HOME }}/go
+      export PATH=/usr/local/go/bin:${GOPATH}/bin:$PATH
+    mode: '0644'
+
+# 5. Install Node.js 18.x (idempotent)
+- name: Check Node.js version (if installed)
+  shell: |
+    if command -v node >/dev/null; then
+      node -v | sed 's/v//'
+    else
+      echo "0"
+    fi
+  register: node_version_check
+  changed_when: false
+
+- name: Set install_node flag if version is outdated
+  set_fact:
+    install_node: true
+  when: node_version_check.stdout is version('18.0.0', '<')
+
+- name: Download Node.js 18.x setup script
+  get_url:
+    url: "https://deb.nodesource.com/setup_18.x"
+    dest: /tmp/nodesource_setup.sh
+    mode: '0755'
+  when: install_node | default(false)
+
+- name: Run Node.js setup script
+  command: bash /tmp/nodesource_setup.sh
+  when: install_node | default(false)
+
+- name: Install Node.js
+  apt:
+    name: nodejs
+    update_cache: yes
+  when: install_node | default(false)
+
+- name: Show Node.js version
+  debug:
+    msg: "Node.js version: {{ node_version_check.stdout }}"

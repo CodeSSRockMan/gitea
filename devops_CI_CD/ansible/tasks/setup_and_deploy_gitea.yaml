@@ -1,7 +1,7 @@
-# tasks/deploy_gitea.yml
+##---
+##tasks/deploy_gitea.yml
 
----
-# 1. Install OS packages
+# 1. Install essential OS packages
 - name: Install essential packages
   apt:
     name:
@@ -14,24 +14,60 @@
       - python3-pymysql
     update_cache: yes
 
-# 2. Download and install Go
-- name: Download Go {{ go_version }} archive
-  get_url:
-    url: "https://golang.org/dl/go{{ go_version }}.linux-amd64.tar.gz"
-    dest: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+# 2. Check current Go version
+- name: Check current Go version
+  shell: |
+    if command -v go >/dev/null; then
+      go version | awk '{print $3}' | sed 's/go//'
+    else
+      echo "0"
+    fi
+  register: current_go_version
+  changed_when: false
 
-- name: Remove any existing Go installation
+- name: Set flag if current Go is older than required
+  set_fact:
+    go_needs_upgrade: true
+  when: current_go_version.stdout is version(go_version, '<')
+
+# 3. Install or upgrade Go
+- name: Remove existing Go installation
   file:
     path: /usr/local/go
     state: absent
+  when: go_needs_upgrade | default(false)
+
+- name: Download Go {{ go_version }} archive
+  get_url:
+    url: "https://go.dev/dl/go{{ go_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+  when: go_needs_upgrade | default(false)
 
 - name: Extract Go to /usr/local
   unarchive:
     src: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
     dest: /usr/local
     remote_src: yes
+  when: go_needs_upgrade | default(false)
 
-# 3. Configure GOPATH and PATH
+- name: Add Go to system PATH
+  copy:
+    dest: /etc/profile.d/go.sh
+    content: |
+      export PATH=$PATH:/usr/local/go/bin
+    mode: '0755'
+  when: go_needs_upgrade | default(false)
+
+- name: Verify installed Go version
+  shell: /usr/local/go/bin/go version
+  register: go_version_final
+  changed_when: false
+
+- name: Show Go version
+  debug:
+    msg: "Go version is now: {{ go_version_final.stdout }}"
+
+# 4. Configure GOPATH
 - name: Ensure GOPATH directory exists
   file:
     path: "{{ ansible_env.HOME }}/go"
@@ -46,31 +82,77 @@
       export PATH=/usr/local/go/bin:${GOPATH}/bin:$PATH
     mode: '0644'
 
-# 4. Install Node.js via APT
-- name: Add NodeSource GPG key
-  apt_key:
-    url: "{{ node_setup_url }}/pubkey.gpg"
+# 5. Install Node.js 18.x (idempotent)
+- name: Check Node.js version (if installed)
+  shell: |
+    if command -v node >/dev/null; then
+      node -v | sed 's/v//'
+    else
+      echo "0"
+    fi
+  register: node_version_check
+  changed_when: false
 
-- name: Add NodeSource repository
-  apt_repository:
-    repo: "deb {{ node_setup_url }} {{ ansible_distribution|lower }} {{ ansible_distribution_release }} main"
-    state: present
+- name: Set install_node flag if version is outdated
+  set_fact:
+    install_node: true
+  when: node_version_check.stdout is version('18.0.0', '<')
+
+- name: Download Node.js 18.x setup script
+  get_url:
+    url: "https://deb.nodesource.com/setup_18.x"
+    dest: /tmp/nodesource_setup.sh
+    mode: '0755'
+  when: install_node | default(false)
+
+- name: Run Node.js setup script
+  command: bash /tmp/nodesource_setup.sh
+  when: install_node | default(false)
 
 - name: Install Node.js
   apt:
     name: nodejs
     update_cache: yes
+  when: install_node | default(false)
 
-- name: Fix node binary path
+- name: Show Node.js version
+  debug:
+    msg: "Node.js version: {{ node_version_check.stdout }}"
+
+
+# 6. Ensure git user and Gitea config directory
+- name: Ensure git user exists
+  ansible.builtin.user:
+    name: git
+    shell: /bin/bash
+    system: yes
+    create_home: yes
+
+- name: Ensure Gitea data and log directories exist
   file:
-    src: "{{ nodejs_path }}"
-    dest: "{{ node_path }}"
-    state: link
-    force: yes
+    path: "{{ gitea.install_dir }}/{{ item }}"
+    state: directory
+    owner: git
+    group: git
+    mode: '0755'
+  loop:
+    - data
+    - log
+    - custom/conf
+    - data/gitea-repositories
 
-# 5. Database setup: create Gitea DB and user
+
+- name: Ensure Gitea config directory exists
+  file:
+    path: "{{ gitea.install_dir }}/custom/conf"
+    state: directory
+    owner: git
+    group: git
+    mode: '0755'
+
+# 7. Setup Database and app.ini
 - name: Create Gitea database
-  mysql_db:
+  community.mysql.mysql_db:
     name: "{{ database.name }}"
     state: present
     login_host: "{{ database.host }}"
@@ -79,9 +161,9 @@
     login_password: "{{ database.admin_password }}"
 
 - name: Create Gitea DB user
-  mysql_user:
-    name: "{{ database.user }}"
-    password: "{{ database.password }}"
+  community.mysql.mysql_user:
+    name: "{{ database.admin_user }}"
+    password: "{{ database.admin_password }}"
     priv: "{{ database.name }}.*:ALL"
     host: "%"
     state: present
@@ -90,47 +172,104 @@
     login_user: "{{ database.admin_user }}"
     login_password: "{{ database.admin_password }}"
 
-# 6. Deploy Gitea configuration (app.ini)
-- name: Ensure custom/conf directory exists
-  file:
-    path: "{{ gitea.install_dir }}/custom/conf"
-    state: directory
-    mode: '0755'
-
 - name: Deploy app.ini
   template:
     src: "{{ playbook_dir }}/../../templates/app.ini.j2"
     dest: "{{ gitea.install_dir }}/custom/conf/app.ini"
+    owner: git
+    group: git
     mode: '0644'
   vars:
     db_type: mysql
-    db_host: "{{ database.host }}:{{ database.port }}"
+    db_host: "{{ database.host }}"
     db_name: "{{ database.name }}"
     db_user: "{{ database.user }}"
     db_passwd: "{{ database.password }}"
-    db_ssl_mode: "{{ database.tls.ssl_mode | default('disable') }}"
+    db_ssl_mode: "{{ (database.tls.ssl_mode if (database.tls is defined and database.tls.ssl_mode is defined) else 'disable') }}"
 
-# 7. Clone Gitea repository
-- name: Clone Gitea
+# 8. Ensure Gitea repo is present and at the right version
+- name: Check if Gitea repo is already cloned
+  stat:
+    path: "{{ gitea.install_dir }}/.git"
+  register: gitea_repo_stat
+
+- name: Clone Gitea repository if missing
   git:
     repo: "{{ gitea.repo }}"
     dest: "{{ gitea.install_dir }}"
-    version: "{{ gitea.branch }}"
-    depth: "{{ git_clone_depth }}"
+    version: "{{ gitea.version }}"
+    depth: 1
+    accept_hostkey: yes
+  when: not gitea_repo_stat.stat.exists
 
-# 8. Compile Gitea with build tags
-- name: Compile Gitea
+- name: Update Gitea repository to {{ gitea.version }}
+  git:
+    repo: "{{ gitea.repo }}"
+    dest: "{{ gitea.install_dir }}"
+    version: "{{ gitea.version }}"
+    depth: 1
+    accept_hostkey: yes
+    update: yes
+    force: no
+  when: gitea_repo_stat.stat.exists
+
+
+# 9. Build Gitea asynchronously and show full log on completion
+- name: Compile Gitea asynchronously
   shell: |
+    export PATH=/usr/local/go/bin:$PATH
     cd {{ gitea.install_dir }}
-    TAGS="{{ gitea_build_tags }}" make build
+    echo "[INFO] Starting build at $(date)" > /tmp/gitea_build.log
+    echo "[INFO] Tags: {{ gitea_build_tags }}" >> /tmp/gitea_build.log
+    TAGS="{{ gitea_build_tags }}" make -j1 build >> /tmp/gitea_build.log 2>&1
   args:
     executable: /bin/bash
-    creates: "{{ gitea.install_dir }}/gitea"
+  async: 3600
+  poll: 0
+  register: async_build_result
 
-# 9. Deploy systemd unit & notify handler
-- name: Deploy systemd unit
+
+- name: Wait for Gitea build to finish
+  async_status:
+    jid: "{{ async_build_result.ansible_job_id }}"
+  register: gitea_build_result
+  until: gitea_build_result.finished
+  retries: 60
+  delay: 30
+  failed_when: false
+
+- name: Show full Gitea build log (last 200 lines)
+  shell: tail -n 200 /tmp/gitea_build.log || true
+  register: build_full_log
+  ignore_errors: true
+
+- name: Print Gitea build log summary
+  debug:
+    msg: "{{ build_full_log.stdout_lines }}"
+  when: build_full_log.stdout_lines is defined
+
+- name: Check Gitea binary exists
+  stat:
+    path: "{{ gitea.install_dir }}/gitea"
+  register: gitea_binary
+
+- name: Deploy Gitea systemd unit
   template:
     src: "{{ playbook_dir }}/../../templates/gitea.service.j2"
-    dest: "/etc/systemd/system/gitea.service"
+    dest: /etc/systemd/system/gitea.service
     mode: '0644'
-  notify: Restart Gitea
+  notify:
+    - Reload systemd
+    - Restart Gitea
+
+## handlers/main.yml
+- name: Reload systemd
+  become: yes
+  command: systemctl daemon-reload
+
+- name: Restart Gitea
+  become: yes
+  systemd:
+    name: gitea
+    state: restarted
+    enabled: yes

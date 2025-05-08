@@ -1,0 +1,25 @@
+# 8. Ensure Gitea repo is present and at the right version
+- name: Check if Gitea repo is already cloned
+  stat:
+    path: "{{ gitea.install_dir }}/.git"
+  register: gitea_repo_stat
+
+- name: Clone Gitea repository if missing
+  git:
+    repo: "{{ gitea.repo }}"
+    dest: "{{ gitea.install_dir }}"
+    version: "{{ gitea.version }}"
+    depth: 1
+    accept_hostkey: yes
+  when: not gitea_repo_stat.stat.exists
+
+- name: Update Gitea repository to {{ gitea.version }}
+  git:
+    repo: "{{ gitea.repo }}"
+    dest: "{{ gitea.install_dir }}"
+    version: "{{ gitea.version }}"
+    depth: 1
+    accept_hostkey: yes
+    update: yes
+    force: no
+  when: gitea_repo_stat.stat.exists

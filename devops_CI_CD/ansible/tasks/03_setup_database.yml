@@ -1,0 +1,36 @@
+# 7. Setup Database and app.ini
+- name: Create Gitea database
+  community.mysql.mysql_db:
+    name: "{{ database.name }}"
+    state: present
+    login_host: "{{ database.host }}"
+    login_port: "{{ database.port }}"
+    login_user: "{{ database.admin_user }}"
+    login_password: "{{ database.admin_password }}"
+
+- name: Create Gitea DB user
+  community.mysql.mysql_user:
+    name: "{{ database.admin_user }}"
+    password: "{{ database.admin_password }}"
+    priv: "{{ database.name }}.*:ALL"
+    host: "%"
+    state: present
+    login_host: "{{ database.host }}"
+    login_port: "{{ database.port }}"
+    login_user: "{{ database.admin_user }}"
+    login_password: "{{ database.admin_password }}"
+
+- name: Deploy app.ini
+  template:
+    src: "{{ playbook_dir }}/../../templates/app.ini.j2"
+    dest: "{{ gitea.install_dir }}/custom/conf/app.ini"
+    owner: git
+    group: git
+    mode: '0644'
+  vars:
+    db_type: mysql
+    db_host: "{{ database.host }}"
+    db_name: "{{ database.name }}"
+    db_user: "{{ database.user }}"
+    db_passwd: "{{ database.password }}"
+    db_ssl_mode: "{{ (database.tls.ssl_mode if (database.tls is defined and database.tls.ssl_mode is defined) else 'disable') }}"

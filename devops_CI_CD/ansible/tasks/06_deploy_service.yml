@@ -1,0 +1,22 @@
+
+# 10. Deploy systemd unit
+- name: Deploy Gitea systemd unit
+  template:
+    src: "{{ playbook_dir }}/../../templates/gitea.service.j2"
+    dest: /etc/systemd/system/gitea.service
+    mode: '0644'
+  notify:
+    - Reload systemd
+    - Restart Gitea
+
+# handlers/main.yml
+- name: Reload systemd
+  become: yes
+  command: systemctl daemon-reload
+
+- name: Restart Gitea
+  become: yes
+  systemd:
+    name: gitea
+    state: restarted
+    enabled: yes

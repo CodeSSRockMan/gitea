@@ -1,0 +1,28 @@
+# 6. Ensure git user and Gitea config directory
+- name: Ensure git user exists
+  ansible.builtin.user:
+    name: git
+    shell: /bin/bash
+    system: yes
+    create_home: yes
+
+- name: Ensure Gitea data and log directories exist
+  file:
+    path: "{{ gitea.install_dir }}/{{ item }}"
+    state: directory
+    owner: git
+    group: git
+    mode: '0755'
+  loop:
+    - data
+    - log
+    - custom/conf
+    - data/gitea-repositories
+
+- name: Ensure Gitea config directory exists
+  file:
+    path: "{{ gitea.install_dir }}/custom/conf"
+    state: directory
+    owner: git
+    group: git
+    mode: '0755'

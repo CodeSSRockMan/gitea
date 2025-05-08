@@ -1,0 +1,23 @@
+APP_NAME = Gitea
+RUN_USER = git
+RUN_MODE = prod
+
+[database]
+DB_TYPE  = mysql
+HOST     = {{ database.host }}:{{ database.port }}
+NAME     = {{ database.name }}
+USER     = {{ database.admin_user }}
+PASSWD   = {{ database.admin_password }}
+SSL_MODE = disable
+
+[server]
+DOMAIN       = {{ ansible_hostname }}
+HTTP_PORT    = 3000
+ROOT_URL     = http://{{ ansible_hostname }}:3000/
+DISABLE_SSH  = false
+SSH_PORT     = 22
+START_SSH_SERVER = false
+
+[log]
+MODE  = console
+LEVEL = Info

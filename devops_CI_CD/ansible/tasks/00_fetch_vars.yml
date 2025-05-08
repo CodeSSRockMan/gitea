@@ -1,0 +1,56 @@
+# Install AWS CLI if not present
+- name: Ensure AWS CLI is installed
+  apt:
+    name: awscli
+    state: present
+    update_cache: true
+
+# Fetch core RDS connection parameters
+- name: Fetch RDS DB URL
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/db_url" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: db_url_result
+  changed_when: false
+
+- name: Fetch RDS host
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/host" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: rds_host_result
+  changed_when: false
+
+- name: Fetch RDS admin username
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/username" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: rds_user_result
+  changed_when: false
+
+- name: Fetch RDS admin password
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/password" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: rds_password_result
+  changed_when: false
+
+# Fetch application (Gitea) DB credentials
+- name: Fetch Gitea DB user
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/gitea_user" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: gitea_user_result
+  changed_when: false
+
+- name: Fetch Gitea DB password
+  command: >
+    aws ssm get-parameter --name "/rds/mysql/gitea_password" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: gitea_password_result
+  changed_when: false
+
+# Assemble everything into a unified dictionary
+- name: Assemble database dictionary
+  set_fact:
+    database:
+      host: "{{ rds_host_result.stdout.split(':')[0] }}"
+      port: 3306
+      name: "{{ db_url_result.stdout.split('/')[-1].split('?')[0] | default('gitea') }}"
+      user: "{{ gitea_user_result.stdout }}"
+      password: "{{ gitea_password_result.stdout }}"
+      admin_user: "{{ rds_user_result.stdout }}"
+      admin_password: "{{ rds_password_result.stdout }}"
