@@ -155,10 +155,35 @@ for i in {1..20}; do
     --command-id "$COMMAND_ID" --details \
     --query "CommandInvocations[0].Status" --output text)
 
-  [[ "$STATUS" == "Success" ]] && { echo "[SUCCESS] Container launched."; break; }
-  echo "[INFO] Status: $STATUS (attempt $i)..." 
+  [[ "$STATUS" == "Success" ]] && {
+    echo "[SUCCESS] SSM command executed successfully."
+    echo "[INFO] Verifying container status..."
+
+    CONTAINER_COMMAND_ID=$(aws ssm send-command \
+      --instance-ids "$AGENT_INSTANCE_ID" \
+      --document-name "AWS-RunShellScript" \
+      --region "$REGION" \
+      --comment "Check Docker container status" \
+      --parameters 'commands=["docker ps -q -f name=jenkins-agent"]' \
+      --query "Command.CommandId" --output text)
+
+    sleep 5
+
+    docker_status=$(aws ssm list-command-invocations \
+      --region "$REGION" \
+      --command-id "$CONTAINER_COMMAND_ID" \
+      --details \
+      --query "CommandInvocations[0].CommandPlugins[0].Output" \
+      --output text)
+
+    [[ -n "$docker_status" ]] && echo "[RUNNING] Container 'jenkins-agent' is running: $docker_status" && break \
+      || { echo "[ERROR] Container 'jenkins-agent' is not running."; exit 1; }
+  }
+
+  echo "[INFO] Status: $STATUS (attempt $i)..."
   sleep 5
 done
+
 
 
 # ---------- HEALTH-CHECK THE DOCKER CONTAINER ----------
