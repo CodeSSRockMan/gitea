@@ -1,0 +1,27 @@
+- name: Fetch GCP project ID
+  command: >
+    aws ssm get-parameter --name "/gitea/gcp/project_id" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: gcp_project_result
+  changed_when: false
+
+- name: Fetch GCP impersonated SA
+  command: >
+    aws ssm get-parameter --name "/gitea/gcp/impersonated_sa" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: gcp_sa_result
+  changed_when: false
+
+- name: Fetch GCP VM name
+  command: >
+    aws ssm get-parameter --name "/gitea/gcp/vm_name" --with-decryption --query 'Parameter.Value' --output text --region {{ aws_region }}
+  register: gcp_vm_result
+  changed_when: false
+
+
+
+- name: Set facts from SSM
+  set_fact:
+    gcp_project:
+      gcp_project: "{{ gcp_project_result.stdout }}"
+      gcp_vm_name: "{{ gcp_vm_result.stdout }}"
+      impersonated_sa: "{{ gcp_sa_result.stdout }}"
+    

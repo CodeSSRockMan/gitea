@@ -35,6 +35,9 @@ database:
 # Build tags as flat variable (para compatibilidad)
 gitea_build_tags: "bindata sqlite sqlite_unlock_notify"
 
+# GCP vas
+gcp_zone: us-central1-a
+docker_compose_file: docker-compose.yml
 
 
 # # Linters configuration
