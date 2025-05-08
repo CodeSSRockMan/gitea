@@ -143,10 +143,32 @@ COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INST
     \"fi\",
     \"sudo docker --version\",
     \"sudo docker rm -f jenkins-agent || true\",
-    \"sudo docker run -d --name jenkins-agent --entrypoint tail ${IMAGE_REF} -f /dev/null\"
+    \"sudo docker run -d --name jenkins-agent --entrypoint tail ${IMAGE_REF} -f /dev/null\" 
   ]" --query "Command.CommandId" --output text)
 
+echo "[INFO] Waiting for SSM command to complete..."
+for i in {1..20}; do
+  STATUS=$(aws ssm list-command-invocations --region "$REGION" \
+    --command-id "$COMMAND_ID" --details \
+    --query "CommandInvocations[0].Status" --output text)
 
+  [[ "$STATUS" == "Success" ]] && {
+    echo "[SUCCESS] Docker install and container launch complete."
+
+    echo "[INFO] Showing full command output:"
+    aws ssm list-command-invocations --region "$REGION" \
+      --command-id "$COMMAND_ID" --details \
+      --query "CommandInvocations[0].CommandPlugins[0].Output" \
+      --output text
+    break
+  }
+
+  echo "[INFO] Status: $STATUS (attempt $i)..."
+  sleep 5
+done
+
+
+# ---------- WAIT FOR CONTAINER TO LAUNCH ----------
 
 
 echo "[INFO] Waiting for container to launch..."
