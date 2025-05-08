@@ -28,44 +28,43 @@ pipeline {
 
     stage('Deploy ephemeral agent') {
       steps {
-        sh './${env.SCRIPTS_PATH}/ec2_container_setup.sh ${env.IMAGE}'
+        sh "./${env.SCRIPTS_PATH}/ec2_container_setup.sh ${env.IMAGE}"
       }
     }
 
     stage('Connect via IAP and execute script') {
-        steps {
-            withCredentials([file(credentialsId: 'gcp-service-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-            sh '''
-                # Auth in container
-                docker exec jenkins-agent bash -c "exit
-                gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS &&
-                gcloud config set project gitea-dr-457918
-                "
+      steps {
+        withCredentials([file(credentialsId: 'gcp-service-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+          sh '''
+            # Auth in container
+            docker exec jenkins-agent bash -c "
+              gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS &&
+              gcloud config set project gitea-dr-457918
+            "
 
-                # Copy script to the VM
-                docker exec jenkins-agent bash -c "
-                echo 'echo Hello from inside Gitea VM!' > remote_script.sh
-                "
+            # Copy script to the VM
+            docker exec jenkins-agent bash -c "
+              echo 'echo Hello from inside Gitea VM!' > remote_script.sh
+            "
 
-                docker exec jenkins-agent bash -c "
-                gcloud compute scp remote_script.sh gitea-vm:~/ --zone=us-central1-a --tunnel-through-iap
-                "
+            docker exec jenkins-agent bash -c "
+              gcloud compute scp remote_script.sh gitea-vm:~/ --zone=us-central1-a --tunnel-through-iap
+            "
 
-                # Execute the script in the VM
-                docker exec jenkins-agent bash -c "
-                gcloud compute ssh gitea-vm --zone=us-central1-a --tunnel-through-iap --command='bash ~/remote_script.sh'
-                "
-            '''
-            }
+            # Execute the script in the VM
+            docker exec jenkins-agent bash -c "
+              gcloud compute ssh gitea-vm --zone=us-central1-a --tunnel-through-iap --command='bash ~/remote_script.sh'
+            "
+          '''
         }
+      }
     }
-
+  }
 
   post {
     always {
       echo '[INFO] Cleaning workspace...'
       cleanWs()
     }
-  }
   }
 }
