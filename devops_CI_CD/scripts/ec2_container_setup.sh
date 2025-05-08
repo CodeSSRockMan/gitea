@@ -10,7 +10,10 @@ AGENT_PROFILE_NAME="jenkins-agent-profile"
 AGENT_SG_NAME="jenkins-agent-sg"
 
 DOCKER_HUB_USER="hescobarsanchez"
-IMAGE_NAME="ansible-aws-gcp"
+
+IMAGE_NAME="${1}"
+[[ -n "$IMAGE_NAME" ]] || { echo "[ERROR] IMAGE_NAME not provided."; exit 1; }
+
 IMAGE_TAG="latest"
 IMAGE_REF="${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
 
