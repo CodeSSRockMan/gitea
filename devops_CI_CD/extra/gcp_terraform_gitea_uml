@@ -1,0 +1,27 @@
+digraph GCP_Terraform_Gitea_UML {
+	fontname=Arial fontsize=12 rankdir=TB
+	node [fillcolor="#FFF9C4" fontname=Arial shape=record style=filled]
+	gcp_network [label="{
+    gcp_network |
+    {Inputs|network_name\lregion\lcidr_block\lproject_id\l} |
+    {Outputs|vpc_network_id\lsubnet_public_self_link\l}
+}"]
+	compute_engine [label="{
+    compute_engine |
+    {Inputs|gitea_vm_name\lmachine_type\lzone_image\linstance_tags\lproject_id\lvpc_network_id\lsubnet_public_self_link\l} |
+    {Outputs|gitea_instance_public_ip\l}
+}"]
+	firewall [label="{
+    firewall |
+    {Inputs|network_name\linstance_tags\l} |
+    {Outputs|}
+}"]
+	gcs_bucket [label="{
+    gcs_bucket |
+    {Inputs|bucket_name\lproject_id\l} |
+    {Outputs|gcs_bucket_name\lgcs_bucket_url\l}
+}"]
+	gcp_network -> compute_engine [label="provides network info"]
+	gcp_network -> firewall [label="provides network name"]
+	gcp_network -> gcs_bucket [label="same project"]
+}

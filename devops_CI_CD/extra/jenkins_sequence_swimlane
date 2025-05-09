@@ -1,0 +1,43 @@
+// Jenkins Sequence
+digraph {
+	nodesep=0.5 rankdir=TB ranksep=0.8 splines=polyline
+	U [label=User shape=plaintext]
+	JL [label="Local Jenkins" shape=plaintext]
+	JM [label="Jenkins Master" shape=plaintext]
+	D [label="Docker Host" shape=plaintext]
+	A [label="Ephemeral Agent" shape=plaintext]
+	{
+		rank=same
+		U
+		JL
+		JM
+		D
+		A
+	}
+	m1 [label="" shape=point width=0]
+	m2 [label="" shape=point width=0]
+	m3 [label="" shape=point width=0]
+	m4 [label="" shape=point width=0]
+	m5 [label="" shape=point width=0]
+	m6 [label="" shape=point width=0]
+	m7 [label="" shape=point width=0]
+	m8 [label="" shape=point width=0]
+	m9 [label="" shape=point width=0]
+	m1 -> m2 [style=invis]
+	m2 -> m3 [style=invis]
+	m3 -> m4 [style=invis]
+	m4 -> m5 [style=invis]
+	m5 -> m6 [style=invis]
+	m6 -> m7 [style=invis]
+	m7 -> m8 [style=invis]
+	m8 -> m9 [style=invis]
+	U -> JL [label="Trigger infra & master deploy" headport=s lhead=m1 ltail=m1 tailport=s]
+	JL -> JM [label="Deploy Jenkins Master" headport=s lhead=m2 ltail=m2 tailport=s]
+	JM -> D [label="Launch Docker container" headport=s lhead=m3 ltail=m3 tailport=s]
+	D -> A [label="Spawn ephemeral agent" headport=s lhead=m4 ltail=m4 tailport=s]
+	A -> JM [label="Request task" headport=s lhead=m5 ltail=m5 tailport=s]
+	JM -> A [label="Send task" headport=s lhead=m6 ltail=m6 tailport=s]
+	A -> JM [label="Return logs" headport=s lhead=m7 ltail=m7 tailport=s]
+	JM -> D [label="Clean up agent" headport=s lhead=m8 ltail=m8 tailport=s]
+	D -> A [label="Remove container" headport=s lhead=m9 ltail=m9 tailport=s]
+}

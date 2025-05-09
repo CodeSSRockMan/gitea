@@ -1,0 +1,39 @@
+digraph Jenkins_BPMN {
+	fontsize=12 nodesep=0.6 rankdir=LR ranksep=1 splines=polyline
+	subgraph cluster_user {
+		color=lightgrey label=User style=filled
+		trigger [label="Trigger deployment"]
+	}
+	subgraph cluster_local {
+		color=lightblue label="Jenkins Local" style=filled
+		deploy_master [label="Deploy Jenkins Master"]
+	}
+	subgraph cluster_master {
+		color=lightgreen label="Jenkins Master" style=filled
+		launch_docker [label="Launch Docker container"]
+		send_task [label="Send task to agent"]
+		collect_logs [label="Receive logs"]
+		cleanup_agent [label="Trigger agent cleanup"]
+	}
+	subgraph cluster_docker {
+		color=lightyellow label="Docker Host" style=filled
+		spawn_agent [label="Spawn ephemeral agent"]
+		remove_container [label="Remove container"]
+	}
+	subgraph cluster_agent {
+		color=mistyrose label="Ephemeral Agent" style=filled
+		request_task [label="Request task"]
+		execute_task [label="Execute task"]
+		send_logs [label="Send logs to master"]
+	}
+	trigger -> deploy_master [label=Start]
+	deploy_master -> launch_docker
+	launch_docker -> spawn_agent
+	spawn_agent -> request_task
+	request_task -> send_task
+	send_task -> execute_task
+	execute_task -> send_logs
+	send_logs -> collect_logs
+	collect_logs -> cleanup_agent
+	cleanup_agent -> remove_container [label=Cleanup]
+}

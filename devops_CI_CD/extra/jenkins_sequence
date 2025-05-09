@@ -1,0 +1,14 @@
+// Jenkins Workflow
+digraph {
+	rankdir=LR size=10
+	U [label=User]
+	JM [label="Jenkins Master"]
+	D [label=Docker]
+	A [label="Ephemeral Agent"]
+	U -> JM [label="Deploy infrastructure"]
+	JM -> D [label="Start container for agents"]
+	D -> A [label="Spawn ephemeral agent"]
+	A -> JM [label="Execute assigned task"]
+	JM -> D [label="Clean up agent"]
+	D -> A [label="Remove agent"]
+}

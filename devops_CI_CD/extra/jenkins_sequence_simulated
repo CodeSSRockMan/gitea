@@ -1,0 +1,36 @@
+// Jenkins Sequence Simulation
+digraph {
+	nodesep=1 rankdir=TB ranksep=0.8 splines=ortho
+	actor0 [label=User shape=plaintext]
+	actor1 [label="Local Jenkins" shape=plaintext]
+	actor2 [label="Jenkins Master" shape=plaintext]
+	actor3 [label="Docker Host" shape=plaintext]
+	actor4 [label="Ephemeral Agent" shape=plaintext]
+	{
+		rank=same
+		actor0
+		actor1
+		actor2
+		actor3
+		actor4
+	}
+	s1 [label="User triggers infra + master deploy" shape=box]
+	s2 [label="Local Jenkins deploys Jenkins Master" shape=box]
+	s3 [label="Master launches Docker container" shape=box]
+	s4 [label="Docker spawns ephemeral agent" shape=box]
+	s5 [label="Agent requests task from Master" shape=box]
+	s6 [label="Master sends task" shape=box]
+	s7 [label="Agent executes task" shape=box]
+	s8 [label="Agent returns logs to Master" shape=box]
+	s9 [label="Master cleans up agent" shape=box]
+	s10 [label="Docker removes container" shape=box]
+	s1 -> s2
+	s2 -> s3
+	s3 -> s4
+	s4 -> s5
+	s5 -> s6
+	s6 -> s7
+	s7 -> s8
+	s8 -> s9
+	s9 -> s10
+}

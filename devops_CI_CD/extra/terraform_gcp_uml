@@ -1,0 +1,35 @@
+digraph Terraform_GCP_UML {
+	fontname=Arial fontsize=11 rankdir=TB
+	node [fillcolor="#E1F5FE" fontname=Arial shape=record style=filled]
+	gcp_network [label="{
+    gcp_network |
+    {Input Variables|network_name\lregion\lcidr_block\lproject_id\l} |
+    {Output|vpc_network_id\lsubnet_public_self_link\l}
+}"]
+	compute_engine [label="{
+    compute_engine |
+    {Input Variables|gitea_vm_name\lmachine_type\lzone/image\linstance_tags\lvpc_network_id\lsubnet_public_self_link\l} |
+    {Output|gitea_instance_public_ip\l}
+}"]
+	firewall [label="{
+    firewall |
+    {Input Variables|network_name\linstance_tags\l} |
+    {Output|firewall_rules_configured\l}
+}"]
+	gcs_bucket [label="{
+    gcs_bucket |
+    {Input Variables|bucket_name\lproject_id\l} |
+    {Output|gcs_bucket_name\lgcs_bucket_url\l}
+}"]
+	outputs [label="{
+    Outputs |
+    {Exported Values|vpc_network_id\lsubnet_public_self_link\lgitea_instance_public_ip\lgcs_bucket_name\lgcs_bucket_url\l}
+}" fillcolor="#FFF3E0"]
+	gcp_network -> compute_engine [label="provides subnet & vpc"]
+	gcp_network -> firewall [label="provides network"]
+	gcp_network -> gcs_bucket [label=project_id style=dashed]
+	compute_engine -> outputs [label=public_ip]
+	gcp_network -> outputs [label="vpc & subnet"]
+	gcs_bucket -> outputs [label="bucket info"]
+	firewall -> outputs [label="rules configured" style=dashed]
+}
