@@ -32,9 +32,34 @@ pipeline {
 
     stage('Install Docker & Launch Agent Container') {
       steps {
+        withCredentials([[
+        $class: 'AmazonWebServicesCredentialsBinding',
+        credentialsId: 'aws-credentials'
+        ]]) {
         script {
-          def instanceId = sh(script: "grep AGENT_ID ephem_env.txt | cut -d '=' -f2", returnStdout: true).trim()
-          def commands = [
+            def instanceId = sh(script: "grep AGENT_ID ephem_env.txt | cut -d '=' -f2", returnStdout: true).trim()
+
+            echo "[INFO] Verifying SSM connectivity to instance ${instanceId}..."
+
+            // Check if the instance is managed and online
+            def pingResult = sh(
+            script: """
+                aws ssm describe-instance-information \
+                --region us-east-1 \
+                --query "InstanceInformationList[?InstanceId=='${instanceId}'].PingStatus" \
+                --output text
+            """,
+            returnStdout: true
+            ).trim()
+
+            if (pingResult != "Online") {
+            error "[ERROR] Instance ${instanceId} is not managed by SSM or not reachable (PingStatus: ${pingResult})"
+            }
+
+            echo "[CONNECTED] Instance ${instanceId} is reachable via AWS Systems Manager."
+
+            // Build the Docker installation command list
+            def commands = [
             "if ! sudo systemctl is-active --quiet docker; then",
             "  echo '[INFO] Installing Docker...'",
             "  sudo apt update",
@@ -47,49 +72,52 @@ pipeline {
             "sudo docker --version",
             "sudo docker rm -f jenkins-agent || true",
             "sudo docker run -d --name jenkins-agent --entrypoint tail ansible-aws-gcp:latest -f /dev/null"
-          ].collect { "\"${it}\"" }.join(",")
+            ]
 
-          def jsonCommands = commands.collect { "\"${it}\"" }.join(",")
-
-          def commandId = sh(
+            // Send the SSM command
+            def commandId = sh(
             script: """
-              aws ssm send-command \
-              --region us-east-1 \
-              --instance-ids "${instanceId}" \
-              --document-name "AWS-RunShellScript" \
-              --comment "Install Docker & Launch Jenkins Agent" \
-              --parameters commands=[${jsonCommands}] \
-              --query "Command.CommandId" \
-              --output text
+                aws ssm send-command \
+                --region us-east-1 \
+                --instance-ids "${instanceId}" \
+                --document-name "AWS-RunShellScript" \
+                --comment "Install Docker & Launch Jenkins Agent" \
+                --parameters '{\"commands\": [${commands}]}' \
+                --query "Command.CommandId" \
+                --output text
             """,
             returnStdout: true
-          ).trim()
+            ).trim()
 
-          echo "[INFO] Waiting for Docker installation and container launch..."
+            echo "[INFO] Command submitted. Waiting for Docker and container launch..."
 
-          for (int i = 0; i < 20; i++) {
+            // Poll command execution status
+            for (int i = 0; i < 20; i++) {
             def status = sh(
-              script: """
+                script: """
                 aws ssm list-command-invocations \
-                --region us-east-1 \
-                --command-id "${commandId}" \
-                --details \
-                --query "CommandInvocations[0].Status" \
-                --output text
-              """, returnStdout: true
+                    --region us-east-1 \
+                    --command-id "${commandId}" \
+                    --details \
+                    --query "CommandInvocations[0].Status" \
+                    --output text
+                """,
+                returnStdout: true
             ).trim()
 
             if (status == "Success") {
-              echo "[SUCCESS] Docker and container started."
-              break
+                echo "[SUCCESS] Docker and Jenkins agent container launched on instance ${instanceId}."
+                break
             }
 
-            echo "[INFO] Waiting... (attempt ${i + 1})"
+            echo "[INFO] Command still running (status: ${status}) - attempt ${i + 1}"
             sleep 5
-          }
+            }
         }
-      }
+        }
+     }
     }
+
 
     stage('Check Container Health') {
       steps {
