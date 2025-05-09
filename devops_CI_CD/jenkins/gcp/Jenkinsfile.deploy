@@ -47,7 +47,7 @@ pipeline {
             "sudo docker --version",
             "sudo docker rm -f jenkins-agent || true",
             "sudo docker run -d --name jenkins-agent --entrypoint tail ansible-aws-gcp:latest -f /dev/null"
-          ]
+          ].collect { "\"${it}\"" }.join(",")
 
           def jsonCommands = commands.collect { "\"${it}\"" }.join(",")
 
