@@ -129,6 +129,7 @@ done
 
 # ---------- INSTALL DOCKER AND START CONTAINER ----------
 echo "[INFO] Installing Docker and launching Jenkins agent container..."
+
 COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
   --document-name "AWS-RunShellScript" --comment "Start Jenkins agent container" \
   --parameters commands="[ 
@@ -146,6 +147,19 @@ COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INST
     \"sudo docker run -d --name jenkins-agent --entrypoint tail ${IMAGE_REF} -f /dev/null\" 
   ]" --query "Command.CommandId" --output text)
 
+# Verificar si el comando fue entregado correctamente
+echo "[INFO] Checking if SSM command was registered..."
+sleep 2
+COMMAND_RECEIVED=$(aws ssm list-command-invocations --region "$REGION" \
+  --command-id "$COMMAND_ID" --details \
+  --query "CommandInvocations[0].Status" --output text 2>/dev/null)
+
+if [[ "$COMMAND_RECEIVED" == "None" || -z "$COMMAND_RECEIVED" ]]; then
+  echo "[ERROR] SSM command was not received by the instance. Aborting."
+  exit 1
+fi
+
+# Esperar hasta que el comando termine
 echo "[INFO] Waiting for SSM command to complete..."
 for i in {1..20}; do
   STATUS=$(aws ssm list-command-invocations --region "$REGION" \
