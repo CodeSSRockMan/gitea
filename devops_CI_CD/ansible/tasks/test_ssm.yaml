@@ -1,6 +1,6 @@
 # tasks/test_ssm.yaml
 
-- name: Mostrar usuario activo
+- name: Show user
   ansible.builtin.command: whoami
   vars:
     ansible_connection: community.aws.aws_ssm

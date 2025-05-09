@@ -1,0 +1,32 @@
+digraph G {
+  rankdir = "RL";
+  node [shape = rect, fontname = "sans-serif"];
+  subgraph "cluster_module.compute_engine" {
+    label = "module.compute_engine"
+    fontname = "sans-serif"
+    "module.compute_engine.google_compute_instance.this" [label="google_compute_instance.this"];
+  }
+  subgraph "cluster_module.firewall" {
+    label = "module.firewall"
+    fontname = "sans-serif"
+    "module.firewall.google_compute_firewall.allow_gitea_web" [label="google_compute_firewall.allow_gitea_web"];
+    "module.firewall.google_compute_firewall.allow_http" [label="google_compute_firewall.allow_http"];
+    "module.firewall.google_compute_firewall.allow_ssh_iap" [label="google_compute_firewall.allow_ssh_iap"];
+  }
+  subgraph "cluster_module.gcp_network" {
+    label = "module.gcp_network"
+    fontname = "sans-serif"
+    "module.gcp_network.google_compute_network.vpc_network" [label="google_compute_network.vpc_network"];
+    "module.gcp_network.google_compute_subnetwork.public_subnet" [label="google_compute_subnetwork.public_subnet"];
+  }
+  subgraph "cluster_module.gcs_bucket" {
+    label = "module.gcs_bucket"
+    fontname = "sans-serif"
+    "module.gcs_bucket.google_storage_bucket.gitea_bucket" [label="google_storage_bucket.gitea_bucket"];
+  }
+  "module.compute_engine.google_compute_instance.this" -> "module.gcp_network.google_compute_subnetwork.public_subnet";
+  "module.firewall.google_compute_firewall.allow_gitea_web" -> "module.gcp_network.google_compute_subnetwork.public_subnet";
+  "module.firewall.google_compute_firewall.allow_http" -> "module.gcp_network.google_compute_subnetwork.public_subnet";
+  "module.firewall.google_compute_firewall.allow_ssh_iap" -> "module.gcp_network.google_compute_subnetwork.public_subnet";
+  "module.gcp_network.google_compute_subnetwork.public_subnet" -> "module.gcp_network.google_compute_network.vpc_network";
+}
