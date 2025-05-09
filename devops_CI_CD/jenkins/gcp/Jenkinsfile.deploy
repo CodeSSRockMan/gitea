@@ -29,6 +29,160 @@ pipeline {
         sh "${env.SCRIPTS_PATH}/ec2_container_setup.sh ${env.DOCKER_IMAGE}"
       }
     }
+    stage('Install Docker & Launch Agent Container') {
+    steps {
+        script {
+        def instanceId = sh(script: "grep AGENT_ID ephem_env.txt | cut -d '=' -f2", returnStdout: true).trim()
+        def installCmd = '''
+            if ! sudo systemctl is-active --quiet docker; then
+            echo "[INFO] Installing Docker..."
+            sudo apt update
+            sudo apt install -y docker.io
+            sudo systemctl enable docker
+            sudo systemctl start docker
+            else
+            echo "[INFO] Docker already running."
+            fi
+            sudo docker --version
+            sudo docker rm -f jenkins-agent || true
+            sudo docker run -d --name jenkins-agent --entrypoint tail ''' + env.DOCKER_IMAGE + ':latest -f /dev/null'
+
+        def cmdId = sh(
+            script: """
+            aws ssm send-command \
+                --region us-east-1 \
+                --instance-ids "${instanceId}" \
+                --document-name "AWS-RunShellScript" \
+                --comment "Install Docker & Launch Jenkins Agent" \
+                --parameters commands=["${installCmd.replace('"', '\\\\"')}"] \
+                --query "Command.CommandId" \
+                --output text
+            """, returnStdout: true
+        ).trim()
+
+        echo "[INFO] Waiting for Docker installation and container launch..."
+
+        for (int i = 0; i < 20; i++) {
+            def status = sh(
+            script: """
+                aws ssm list-command-invocations \
+                --region us-east-1 \
+                --command-id "${cmdId}" \
+                --details \
+                --query "CommandInvocations[0].Status" \
+                --output text
+            """, returnStdout: true
+            ).trim()
+
+            if (status == "Success") {
+            echo "[SUCCESS] Docker and container started."
+            break
+            }
+
+            echo "[INFO] Waiting... (attempt ${i+1})"
+            sleep 5
+        }
+        }
+    }
+    }
+
+    stage('Check Container Health') {
+    steps {
+        script {
+        def instanceId = sh(script: "grep AGENT_ID ephem_env.txt | cut -d '=' -f2", returnStdout: true).trim()
+
+        def healthCmdId = sh(
+            script: """
+            aws ssm send-command \
+                --region us-east-1 \
+                --instance-ids "${instanceId}" \
+                --document-name "AWS-RunShellScript" \
+                --parameters commands='["docker inspect -f {{.State.Running}} jenkins-agent"]' \
+                --query "Command.CommandId" \
+                --output text
+            """, returnStdout: true
+        ).trim()
+
+        for (int i = 0; i < 10; i++) {
+            def running = sh(
+            script: """
+                aws ssm list-command-invocations \
+                --region us-east-1 \
+                --command-id "${healthCmdId}" \
+                --details \
+                --query "CommandInvocations[0].CommandPlugins[0].Output" \
+                --output text
+            """, returnStdout: true
+            ).trim()
+
+            if (running == "true") {
+            echo "[SUCCESS] Container is healthy and running."
+            break
+            } else {
+            echo "[WARN] Container not healthy yet (attempt ${i+1})"
+            sleep 3
+            }
+        }
+        }
+    }
+    }
+
+    stage('Check Tools in Jenkins Agent') {
+    steps {
+        script {
+        def instanceId = sh(script: "grep AGENT_ID ephem_env.txt | cut -d '=' -f2", returnStdout: true).trim()
+
+        def cmdId = sh(
+            script: '''
+            aws ssm send-command --region us-east-1 \
+                --instance-ids "${instanceId}" \
+                --document-name "AWS-RunShellScript" \
+                --comment "Tool version check" \
+                --parameters commands="[
+                \\"echo Terraform version:\\",
+                \\"sudo docker exec jenkins-agent terraform version || echo 'Terraform not found'\\",
+                \\"echo AWS CLI version:\\",
+                \\"sudo docker exec jenkins-agent aws --version || echo 'AWS CLI not found'\\",
+                \\"echo GCloud SDK version:\\",
+                \\"sudo docker exec jenkins-agent gcloud version || echo 'GCloud not found'\\"
+                ]" \
+                --query "Command.CommandId" --output text
+            ''', returnStdout: true
+        ).trim()
+
+        echo "[INFO] Waiting for version check output..."
+
+        for (int i = 0; i < 20; i++) {
+            def status = sh(
+            script: """
+                aws ssm list-command-invocations \
+                --region us-east-1 \
+                --command-id "${cmdId}" --details \
+                --query "CommandInvocations[0].Status" \
+                --output text
+            """, returnStdout: true
+            ).trim()
+
+            if (status == "Success") {
+            def output = sh(
+                script: """
+                aws ssm list-command-invocations \
+                    --region us-east-1 \
+                    --command-id "${cmdId}" \
+                    --details \
+                    --query "CommandInvocations[0].CommandPlugins[0].Output" --output text
+                """, returnStdout: true
+            )
+            echo output
+            break
+            }
+
+            echo "[INFO] Still waiting for tool output (attempt ${i+1})"
+            sleep 5
+        }
+        }
+    }
+    }
 
     stage('Connect via IAP and execute script') {
       steps {
