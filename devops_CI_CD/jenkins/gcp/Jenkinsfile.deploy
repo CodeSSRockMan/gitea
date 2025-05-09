@@ -8,24 +8,21 @@ pipeline {
   }
 
   stages {
-
-stages {
-        stage('Sparse Checkout') {
-            steps {
-                checkout([
-                    $class: 'GitSCM',
-                    userRemoteConfigs: scm.userRemoteConfigs,
-                    branches: scm.branches,
-                    extensions: [
-                        [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
-                            [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
-                            [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
-                        ]]
-                    ]
-                ])
-            }
-        }
-
+    stage('Sparse Checkout') {
+      steps {
+        checkout([
+          $class: 'GitSCM',
+          userRemoteConfigs: scm.userRemoteConfigs,
+          branches: scm.branches,
+          extensions: [
+            [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
+              [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
+              [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
+            ]]
+          ]
+        ])
+      }
+    }
 
     stage('Deploy ephemeral agent') {
       steps {
@@ -61,11 +58,9 @@ stages {
 
   post {
     always {
-      
-        echo '[INFO] Cleaning workspace...'
-        cleanWs()
-        echo '[INFO] Workspace cleaned.'
-      
+      echo '[INFO] Cleaning workspace...'
+      cleanWs()
+      echo '[INFO] Workspace cleaned.'
     }
   }
 }
