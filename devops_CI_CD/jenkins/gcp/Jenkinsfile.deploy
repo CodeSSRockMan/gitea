@@ -9,22 +9,23 @@ pipeline {
 
   stages {
 
-    stage('Sparse Checkout') {
-      steps {
-        echo "Checking out only ${env.SCRIPTS_PATH} and ${env.ANSIBLE_PATH}"
-        checkout([
-          $class: 'GitSCM',
-          userRemoteConfigs: scm.userRemoteConfigs,
-          branches: scm.branches,
-          extensions: [
-            [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
-              [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
-              [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
-            ]]
-          ]
-        ])
-      }
-    }
+stages {
+        stage('Sparse Checkout') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    userRemoteConfigs: scm.userRemoteConfigs,
+                    branches: scm.branches,
+                    extensions: [
+                        [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
+                            [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
+                            [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
+                        ]]
+                    ]
+                ])
+            }
+        }
+
 
     stage('Deploy ephemeral agent') {
       steps {
