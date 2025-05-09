@@ -5,6 +5,7 @@ pipeline {
     DOCKER_IMAGE = "ansible-aws-gcp"
     SCRIPTS_PATH = 'devops_CI_CD/scripts'
     ANSIBLE_PATH = 'devops_CI_CD/ansible'
+    JENKINS_PATH = 'devops_CI_CD/jenkins'
   }
 
   stages {
@@ -19,6 +20,7 @@ pipeline {
           extensions: [
             [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [
               [$class: 'SparseCheckoutPath', path: "${env.SCRIPTS_PATH}"],
+              [$class: 'SparseCheckoutPath', path: "${env.JENKINS_PATH}"],
               [$class: 'SparseCheckoutPath', path: "${env.ANSIBLE_PATH}"]
             ]]
           ]
@@ -28,7 +30,7 @@ pipeline {
 
     stage('Deploy ephemeral agent') {
       steps {
-        sh "./${env.SCRIPTS_PATH}/ec2_container_setup.sh ${env.IMAGE}"
+        sh "./${env.SCRIPTS_PATH}/ec2_container_setup.sh ${env.DOCKER_IMAGE}"
       }
     }
 
