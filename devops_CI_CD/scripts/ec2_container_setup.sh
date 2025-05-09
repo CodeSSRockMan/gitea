@@ -127,151 +127,154 @@ for i in {1..20}; do
   echo "[INFO] Still not managed (attempt $i)..."; sleep 6
 done
 
-# ---------- INSTALL DOCKER AND START CONTAINER ----------
-echo "[INFO] Installing Docker and launching Jenkins agent container..."
-
-COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
-  --document-name "AWS-RunShellScript" --comment "Start Jenkins agent container" \
-  --parameters commands="[ 
-    \"if ! sudo systemctl is-active --quiet docker; then\",
-    \"  echo '[INFO] Installing Docker...'\",
-    \"  sudo apt update\",
-    \"  sudo apt install -y docker.io\",
-    \"  sudo systemctl enable docker\",
-    \"  sudo systemctl start docker\",
-    \"else\",
-    \"  echo '[INFO] Docker already running.'\",
-    \"fi\",
-    \"sudo docker --version\",
-    \"sudo docker rm -f jenkins-agent || true\",
-    \"sudo docker run -d --name jenkins-agent --entrypoint tail ${IMAGE_REF} -f /dev/null\" 
-  ]" --query "Command.CommandId" --output text)
-
-# Verificar si el comando fue entregado correctamente
-echo "[INFO] Checking if SSM command was registered..."
-sleep 2
-COMMAND_RECEIVED=$(aws ssm list-command-invocations --region "$REGION" \
-  --command-id "$COMMAND_ID" --details \
-  --query "CommandInvocations[0].Status" --output text 2>/dev/null)
-
-if [[ "$COMMAND_RECEIVED" == "None" || -z "$COMMAND_RECEIVED" ]]; then
-  echo "[ERROR] SSM command was not received by the instance. Aborting."
-  exit 1
-fi
-
-# Esperar hasta que el comando termine
-echo "[INFO] Waiting for SSM command to complete..."
-for i in {1..20}; do
-  STATUS=$(aws ssm list-command-invocations --region "$REGION" \
-    --command-id "$COMMAND_ID" --details \
-    --query "CommandInvocations[0].Status" --output text)
-
-  [[ "$STATUS" == "Success" ]] && {
-    echo "[SUCCESS] Docker install and container launch complete."
-
-    echo "[INFO] Showing full command output:"
-    aws ssm list-command-invocations --region "$REGION" \
-      --command-id "$COMMAND_ID" --details \
-      --query "CommandInvocations[0].CommandPlugins[0].Output" \
-      --output text
-    break
-  }
-
-  echo "[INFO] Status: $STATUS (attempt $i)..."
-  sleep 5
-done
-
-
-# ---------- WAIT FOR CONTAINER TO LAUNCH ----------
-
-
-echo "[INFO] Waiting for container to launch..."
-for i in {1..20}; do
-  STATUS=$(aws ssm list-command-invocations --region "$REGION" \
-    --command-id "$COMMAND_ID" --details \
-    --query "CommandInvocations[0].Status" --output text)
-
-  [[ "$STATUS" == "Success" ]] && {
-    echo "[SUCCESS] SSM command executed successfully."
-    echo "[INFO] Verifying container status..."
-
-    CONTAINER_COMMAND_ID=$(aws ssm send-command \
-      --instance-ids "$AGENT_INSTANCE_ID" \
-      --document-name "AWS-RunShellScript" \
-      --region "$REGION" \
-      --comment "Check Docker container status" \
-      --parameters 'commands=["docker ps -q -f name=jenkins-agent"]' \
-      --query "Command.CommandId" --output text)
-
-    sleep 5
-
-    docker_status=$(aws ssm list-command-invocations \
-      --region "$REGION" \
-      --command-id "$CONTAINER_COMMAND_ID" \
-      --details \
-      --query "CommandInvocations[0].CommandPlugins[0].Output" \
-      --output text)
-
-    [[ -n "$docker_status" ]] && echo "[RUNNING] Container 'jenkins-agent' is running: $docker_status" && break \
-      || { echo "[ERROR] Container 'jenkins-agent' is not running."; exit 1; }
-  }
-
-  echo "[INFO] Status: $STATUS (attempt $i)..."
-  sleep 5
-done
-
-
-
-# ---------- HEALTH-CHECK THE DOCKER CONTAINER ----------
-echo "[INFO] Verifying container is running]"
-HEALTH_ID=$(aws ssm send-command \
-  --region "$REGION" \
-  --instance-ids "$AGENT_INSTANCE_ID" \
-  --document-name "AWS-RunShellScript" \
-  --parameters commands='["docker inspect -f {{.State.Running}} jenkins-agent"]' \
-  --query "Command.CommandId" --output text)
-
-# wait until docker inspect returns “true”
-for i in {1..10}; do
-  ALIVE=$(aws ssm list-command-invocations \
-    --region "$REGION" \
-    --command-id "$HEALTH_ID" \
-    --details \
-    --query "CommandInvocations[0].CommandPlugins[0].Output" --output text)
-  [[ "$ALIVE" == "true" ]] && { echo "[SUCCESS] Container is healthy."; break; }
-  echo "[WARN] Container not healthy yet ($i)…"; sleep 3
-done
-
-# ---------- TOOL VERSION CHECK ----------
-echo "[INFO] Checking tool versions inside container..."
-COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
-  --document-name "AWS-RunShellScript" --comment "Tool version check" \
-  --parameters commands="[
-    \"echo Terraform version:\",
-    \"sudo docker exec jenkins-agent terraform version || echo 'Terraform not found'\",
-    \"echo AWS CLI version:\",
-    \"sudo docker exec jenkins-agent aws --version || echo 'AWS CLI not found'\",
-    \"echo GCloud SDK version:\",
-    \"sudo docker exec jenkins-agent gcloud version || echo 'GCloud not found'\"
-  ]" --query "Command.CommandId" --output text)
-
-echo "[INFO] Waiting for version check output..."
-for i in {1..20}; do
-  STATUS=$(aws ssm list-command-invocations --region "$REGION" \
-    --command-id "$COMMAND_ID" --details \
-    --query "CommandInvocations[0].Status" --output text)
-
-  if [[ "$STATUS" == "Success" ]]; then
-    aws ssm list-command-invocations --region "$REGION" \
-      --command-id "$COMMAND_ID" --details \
-      --query "CommandInvocations[0].CommandPlugins[0].Output" --output text
-    break
-  else
-    echo "[INFO] Status: $STATUS (attempt $i)..."
-    sleep 5
-  fi
-done
-
-# ---------- GET INSTANCE INFO ----------
+# # ---------- GET INSTANCE INFO ----------
 echo "AGENT_ID=$AGENT_INSTANCE_ID" > ephem_env.txt
+
+# # ---------- INSTALL DOCKER AND START CONTAINER ----------
+# echo "[INFO] Installing Docker and launching Jenkins agent container..."
+
+# COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
+#   --document-name "AWS-RunShellScript" --comment "Start Jenkins agent container" \
+#   --parameters commands="[ 
+#     \"if ! sudo systemctl is-active --quiet docker; then\",
+#     \"  echo '[INFO] Installing Docker...'\",
+#     \"  sudo apt update\",
+#     \"  sudo apt install -y docker.io\",
+#     \"  sudo systemctl enable docker\",
+#     \"  sudo systemctl start docker\",
+#     \"else\",
+#     \"  echo '[INFO] Docker already running.'\",
+#     \"fi\",
+#     \"sudo docker --version\",
+#     \"sudo docker rm -f jenkins-agent || true\",
+#     \"sudo docker run -d --name jenkins-agent --entrypoint tail ${IMAGE_REF} -f /dev/null\" 
+#   ]" --query "Command.CommandId" --output text)
+
+# # Verificar si el comando fue entregado correctamente
+# echo "[INFO] Checking if SSM command was registered..."
+# sleep 2
+# COMMAND_RECEIVED=$(aws ssm list-command-invocations --region "$REGION" \
+#   --command-id "$COMMAND_ID" --details \
+#   --query "CommandInvocations[0].Status" --output text 2>/dev/null)
+
+# if [[ "$COMMAND_RECEIVED" == "None" || -z "$COMMAND_RECEIVED" ]]; then
+#   echo "[ERROR] SSM command was not received by the instance. Aborting."
+#   exit 1
+# fi
+
+# # Esperar hasta que el comando termine
+# echo "[INFO] Waiting for SSM command to complete..."
+# for i in {1..20}; do
+#   STATUS=$(aws ssm list-command-invocations --region "$REGION" \
+#     --command-id "$COMMAND_ID" --details \
+#     --query "CommandInvocations[0].Status" --output text)
+
+#   [[ "$STATUS" == "Success" ]] && {
+#     echo "[SUCCESS] Docker install and container launch complete."
+
+#     echo "[INFO] Showing full command output:"
+#     aws ssm list-command-invocations --region "$REGION" \
+#       --command-id "$COMMAND_ID" --details \
+#       --query "CommandInvocations[0].CommandPlugins[0].Output" \
+#       --output text
+#     break
+#   }
+
+#   echo "[INFO] Status: $STATUS (attempt $i)..."
+#   sleep 5
+# done
+
+
+# # ---------- WAIT FOR CONTAINER TO LAUNCH ----------
+
+
+# echo "[INFO] Waiting for container to launch..."
+# for i in {1..20}; do
+#   STATUS=$(aws ssm list-command-invocations --region "$REGION" \
+#     --command-id "$COMMAND_ID" --details \
+#     --query "CommandInvocations[0].Status" --output text)
+
+#   [[ "$STATUS" == "Success" ]] && {
+#     echo "[SUCCESS] SSM command executed successfully."
+#     echo "[INFO] Verifying container status..."
+
+#     CONTAINER_COMMAND_ID=$(aws ssm send-command \
+#       --instance-ids "$AGENT_INSTANCE_ID" \
+#       --document-name "AWS-RunShellScript" \
+#       --region "$REGION" \
+#       --comment "Check Docker container status" \
+#       --parameters 'commands=["docker ps -q -f name=jenkins-agent"]' \
+#       --query "Command.CommandId" --output text)
+
+#     sleep 5
+
+#     docker_status=$(aws ssm list-command-invocations \
+#       --region "$REGION" \
+#       --command-id "$CONTAINER_COMMAND_ID" \
+#       --details \
+#       --query "CommandInvocations[0].CommandPlugins[0].Output" \
+#       --output text)
+
+#     [[ -n "$docker_status" ]] && echo "[RUNNING] Container 'jenkins-agent' is running: $docker_status" && break \
+#       || { echo "[ERROR] Container 'jenkins-agent' is not running."; exit 1; }
+#   }
+
+#   echo "[INFO] Status: $STATUS (attempt $i)..."
+#   sleep 5
+# done
+
+
+
+# # ---------- HEALTH-CHECK THE DOCKER CONTAINER ----------
+# echo "[INFO] Verifying container is running]"
+# HEALTH_ID=$(aws ssm send-command \
+#   --region "$REGION" \
+#   --instance-ids "$AGENT_INSTANCE_ID" \
+#   --document-name "AWS-RunShellScript" \
+#   --parameters commands='["docker inspect -f {{.State.Running}} jenkins-agent"]' \
+#   --query "Command.CommandId" --output text)
+
+# # wait until docker inspect returns “true”
+# for i in {1..10}; do
+#   ALIVE=$(aws ssm list-command-invocations \
+#     --region "$REGION" \
+#     --command-id "$HEALTH_ID" \
+#     --details \
+#     --query "CommandInvocations[0].CommandPlugins[0].Output" --output text)
+#   [[ "$ALIVE" == "true" ]] && { echo "[SUCCESS] Container is healthy."; break; }
+#   echo "[WARN] Container not healthy yet ($i)…"; sleep 3
+# done
+
+# # ---------- TOOL VERSION CHECK ----------
+# echo "[INFO] Checking tool versions inside container..."
+# COMMAND_ID=$(aws ssm send-command --region "$REGION" --instance-ids "$AGENT_INSTANCE_ID" \
+#   --document-name "AWS-RunShellScript" --comment "Tool version check" \
+#   --parameters commands="[
+#     \"echo Terraform version:\",
+#     \"sudo docker exec jenkins-agent terraform version || echo 'Terraform not found'\",
+#     \"echo AWS CLI version:\",
+#     \"sudo docker exec jenkins-agent aws --version || echo 'AWS CLI not found'\",
+#     \"echo GCloud SDK version:\",
+#     \"sudo docker exec jenkins-agent gcloud version || echo 'GCloud not found'\"
+#   ]" --query "Command.CommandId" --output text)
+
+# echo "[INFO] Waiting for version check output..."
+# for i in {1..20}; do
+#   STATUS=$(aws ssm list-command-invocations --region "$REGION" \
+#     --command-id "$COMMAND_ID" --details \
+#     --query "CommandInvocations[0].Status" --output text)
+
+#   if [[ "$STATUS" == "Success" ]]; then
+#     aws ssm list-command-invocations --region "$REGION" \
+#       --command-id "$COMMAND_ID" --details \
+#       --query "CommandInvocations[0].CommandPlugins[0].Output" --output text
+#     break
+#   else
+#     echo "[INFO] Status: $STATUS (attempt $i)..."
+#     sleep 5
+#   fi
+# done
+
+# # ---------- GET INSTANCE INFO ----------
+# echo "AGENT_ID=$AGENT_INSTANCE_ID" > ephem_env.txt
 
